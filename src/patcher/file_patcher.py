@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from models import EngineInfo
 
@@ -22,6 +22,48 @@ def _is_source_file(path: str) -> bool:
 
 class FilePatcher:
     """Handles copying/removing engine files for custom engine versions."""
+
+    # Marker file written to UE installation after a successful apply
+    MARKER_RELPATH = "Engine/Binaries/.uepatcher_version"
+
+    @staticmethod
+    def marker_path(ue_dir: str) -> str:
+        return os.path.join(ue_dir, FilePatcher.MARKER_RELPATH)
+
+    @staticmethod
+    def write_marker(ue_dir: str, version_name: str):
+        """Write the applied version marker."""
+        path = FilePatcher.marker_path(ue_dir)
+        d = os.path.dirname(path)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(version_name.strip())
+
+    @staticmethod
+    def read_marker(ue_dir: str) -> str:
+        """Read the applied version marker, or empty string if none."""
+        path = FilePatcher.marker_path(ue_dir)
+        if not os.path.isfile(path):
+            return ""
+        try:
+            with open(path, "r") as f:
+                return f.read().strip()
+        except OSError:
+            return ""
+
+    @staticmethod
+    def detect_applied_version(ue_dir: str, all_versions: List[EngineInfo]) -> Optional[str]:
+        """Return the engine_version matching the marker, or None."""
+        marker = FilePatcher.read_marker(ue_dir)
+        if not marker:
+            return None
+        # Check against known versions (case-insensitive)
+        for v in all_versions:
+            if v.engine_version.lower() == marker.lower():
+                return v.engine_version
+        # Also accept marker value that isn't a known version (manual edit)
+        return marker
 
     def apply_custom(
         self,
@@ -85,7 +127,8 @@ class FilePatcher:
         # Collect files with parent inheritance
         self._collect_files(
             engine_version, all_versions, custom_engine, versions_root,
-            source_mode, files_to_copy, files_to_remove, ignored_targets,
+            ue_install_dir, source_mode,
+            files_to_copy, files_to_remove, ignored_targets,
         )
 
         # Verify sources exist
@@ -132,6 +175,14 @@ class FilePatcher:
             f"{action}: {result.files_copied} files copied, "
             f"{result.files_removed} removed."
         )
+        # Write marker so we can detect applied version on next launch
+        try:
+            self.write_marker(
+                ue_install_dir,
+                "default" if not custom_engine else engine_version.engine_version,
+            )
+        except OSError:
+            pass  # Non-fatal — marker is just a convenience
         return result
 
     def _collect_files(
@@ -140,6 +191,7 @@ class FilePatcher:
         all_versions: List[EngineInfo],
         custom_engine: bool,
         versions_root: str,
+        ue_install_dir: str,
         source_mode: bool,
         files_to_copy: List[Tuple[str, str]],
         files_to_remove: List[str],
@@ -154,8 +206,6 @@ class FilePatcher:
                 continue
             ignored_targets.add(target)
 
-            unreal_dir = version.unreal_dir
-
             if custom_engine:
                 if file_entry.path_custom:
                     source_path = (
@@ -165,10 +215,10 @@ class FilePatcher:
                     )
                     if source_mode and not _is_source_file(file_entry.path_custom):
                         continue
-                    target_path = os.path.join(unreal_dir, target.lstrip("\\/"))
+                    target_path = os.path.join(ue_install_dir, target.lstrip("\\/"))
                     files_to_copy.append((source_path, target_path))
                 elif file_entry.path_default:
-                    target_path = os.path.join(unreal_dir, target.lstrip("\\/"))
+                    target_path = os.path.join(ue_install_dir, target.lstrip("\\/"))
                     if os.path.isfile(target_path):
                         files_to_remove.append(target_path)
             else:
@@ -180,10 +230,10 @@ class FilePatcher:
                     )
                     if source_mode and not _is_source_file(file_entry.path_default):
                         continue
-                    target_path = os.path.join(unreal_dir, target.lstrip("\\/"))
+                    target_path = os.path.join(ue_install_dir, target.lstrip("\\/"))
                     files_to_copy.append((source_path, target_path))
                 elif file_entry.path_custom:
-                    target_path = os.path.join(unreal_dir, target.lstrip("\\/"))
+                    target_path = os.path.join(ue_install_dir, target.lstrip("\\/"))
                     if os.path.isfile(target_path):
                         files_to_remove.append(target_path)
 
@@ -193,6 +243,7 @@ class FilePatcher:
                 if v.engine_version.lower() == version.parent_version.lower():
                     self._collect_files(
                         v, all_versions, custom_engine, versions_root,
-                        source_mode, files_to_copy, files_to_remove, ignored_targets,
+                        ue_install_dir, source_mode,
+                        files_to_copy, files_to_remove, ignored_targets,
                     )
                     break

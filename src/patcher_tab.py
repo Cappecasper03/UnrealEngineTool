@@ -4,7 +4,7 @@ import os
 import threading
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, Signal, QObject, QThread
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QLineEdit, QLabel, QProgressBar, QPlainTextEdit,
@@ -19,17 +19,32 @@ from theme import (
 )
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
+from patcher.version_dialog import VersionManagerDialog
 
 
 class PatcherTab(QWidget):
-    """Patcher tab with version management, changelog, and apply/revert controls."""
+    """Patcher tab with combined UE selector, version management, and apply/revert controls."""
+
+    _patch_finished = Signal(object, str)
+
+    # Hidden style for the combo box (like plugin manager) — no dropdown arrow
+    _COMBO_QSS = (
+        "QComboBox { padding-right: 0px; }"
+        "QComboBox::drop-down { "
+        "  subcontrol-origin: padding;"
+        "  subcontrol-position: top right;"
+        "  width: 0px; border: none; background: transparent;"
+        "}"
+        "QComboBox::down-arrow { image: none; border: none; }"
+    )
 
     def __init__(self):
         super().__init__()
-        self._version_io = None  # We use module-level functions instead
         self._file_patcher = FilePatcher()
+        self._patch_finished.connect(self._finish_apply)
 
         self._versions: List[EngineInfo] = []
+        self._current_ue_root = ""
         self._source_mode = False
         self._is_working = False
         self._versions_root = os.path.join(
@@ -38,79 +53,52 @@ class PatcherTab(QWidget):
 
         self._build_ui()
         self._discover_versions()
-        self._refresh_detected_paths()
+        self._discover_paths()
+
+    # ── UI Setup ──
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 12)
         layout.setSpacing(6)
 
-        # ── Section 1: Target UE Directory + Version ──
-        layout.addWidget(self._make_section_label("Target Installation"))
+        # ── Section 1: UE Folder Selector (combined combo + Browse) ──
+        layout.addWidget(self._make_section_label("Unreal Engine Installation"))
 
-        top_row = QHBoxLayout()
-
-        dir_label = QLabel("UE Directory:")
-        top_row.addWidget(dir_label)
-
-        self._engine_dir = QLineEdit()
-        self._engine_dir.setPlaceholderText("Path to Unreal Engine installation...")
-        self._engine_dir.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._engine_dir.textChanged.connect(self._update_apply_buttons)
-        top_row.addWidget(self._engine_dir, 1)
-
-        ver_label = QLabel("Version:")
-        top_row.addWidget(ver_label)
-
-        self._version_picker = QComboBox()
-        self._version_picker.setFixedWidth(200)
-        self._version_picker.currentIndexChanged.connect(self._on_version_selected)
-        top_row.addWidget(self._version_picker)
+        folder_row = QHBoxLayout()
+        self._ue_folder_combo = QComboBox()
+        self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._ue_folder_combo.setStyleSheet(self._COMBO_QSS)
+        self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
+        folder_row.addWidget(self._ue_folder_combo)
 
         self._browse_btn = QPushButton("Browse\u2026")
-        self._browse_btn.clicked.connect(self._on_browse_dir)
-        top_row.addWidget(self._browse_btn)
+        self._browse_btn.clicked.connect(self._on_browse)
+        folder_row.addWidget(self._browse_btn)
 
-        self._settings_btn = QPushButton("Settings")
-        self._settings_btn.clicked.connect(self._on_settings)
-        top_row.addWidget(self._settings_btn)
+        layout.addLayout(folder_row)
 
-        self._info_btn = QPushButton("Info")
-        self._info_btn.clicked.connect(self._on_info)
-        top_row.addWidget(self._info_btn)
+        # ── Section 2: Version selector + applied indicator ──
+        version_row = QHBoxLayout()
 
-        layout.addLayout(top_row)
+        ver_label = QLabel("Engine Version:")
+        version_row.addWidget(ver_label)
 
-        # Auto-detect row
-        detect_row = QHBoxLayout()
-        self._detect_combo = QComboBox()
-        self._detect_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._detect_combo.addItem("(detect installations...)")
-        detect_row.addWidget(self._detect_combo)
-
-        self._detect_btn = QPushButton("Set")
-        self._detect_btn.setFixedWidth(60)
-        self._detect_btn.clicked.connect(self._on_detect_set)
-        detect_row.addWidget(self._detect_btn)
-
-        self._refresh_detect_btn = QPushButton("Refresh")
-        self._refresh_detect_btn.setFixedWidth(80)
-        self._refresh_detect_btn.clicked.connect(self._refresh_detected_paths)
-        detect_row.addWidget(self._refresh_detect_btn)
-
-        layout.addLayout(detect_row)
-
-        # ── Section 2: Applied version indicator ──
-        indicator_row = QHBoxLayout()
-        self._applied_version_label = QLabel("")
-        self._applied_version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        indicator_row.addWidget(self._applied_version_label)
+        self._version_picker = QComboBox()
+        self._version_picker.setMinimumWidth(200)
+        self._version_picker.currentIndexChanged.connect(self._on_version_selected)
+        version_row.addWidget(self._version_picker, 1)
 
         self._version_count_label = QLabel("")
         self._version_count_label.setAlignment(Qt.AlignRight)
-        indicator_row.addWidget(self._version_count_label)
+        version_row.addWidget(self._version_count_label)
 
-        layout.addLayout(indicator_row)
+        layout.addLayout(version_row)
+
+        # Applied version indicator
+        self._applied_version_label = QLabel("")
+        self._applied_version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self._applied_version_label)
 
         # ── Section 3: Changelog ──
         layout.addWidget(self._make_section_label("Changelog"))
@@ -159,6 +147,18 @@ class PatcherTab(QWidget):
         self._source_mode_btn.clicked.connect(self._toggle_source_mode)
         action_row.addWidget(self._source_mode_btn)
 
+        action_row.addWidget(self._make_vsep())
+
+        self._manage_btn = QPushButton("Manage")
+        self._manage_btn.clicked.connect(self._on_manage_versions)
+        action_row.addWidget(self._manage_btn)
+
+        action_row.addStretch(1)
+
+        self._info_btn = QPushButton("Info")
+        self._info_btn.clicked.connect(self._on_info)
+        action_row.addWidget(self._info_btn)
+
         layout.addLayout(action_row)
 
         # ── Section 5: Status ──
@@ -195,18 +195,83 @@ class PatcherTab(QWidget):
         sep.setStyleSheet(f"color: {C_TEXT_DIM};")
         return sep
 
+    # ── UE Path Discovery ──
+
+    def _discover_paths(self):
+        """Populate the UE folder combo from registry + filesystem locations."""
+        self._ue_folder_combo.blockSignals(True)
+        self._ue_folder_combo.clear()
+
+        paths = discover_ue_installations()
+        for p in paths:
+            self._ue_folder_combo.addItem(p)
+            idx = self._ue_folder_combo.count() - 1
+            self._ue_folder_combo.setItemData(idx, p, Qt.UserRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ToolTipRole)
+
+        self._ue_folder_combo.blockSignals(False)
+
+        # Auto-select the first discovered installation
+        if paths:
+            self._ue_folder_combo.setCurrentIndex(0)
+            self._on_folder_selected(0)
+
+    def _on_folder_selected(self, index: int):
+        if index < 0:
+            return
+        text = self._ue_folder_combo.currentText().strip()
+        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or text
+        self._on_ue_dir_changed()
+
+    def _on_browse(self):
+        path = QFileDialog.getExistingDirectory(self, "Select Unreal Engine Directory")
+        if not path:
+            return
+
+        # Normalise and check if already in combo
+        norm = os.path.normpath(path).lower()
+        for i in range(self._ue_folder_combo.count()):
+            stored = self._ue_folder_combo.itemData(i, Qt.UserRole)
+            if stored and os.path.normpath(stored).lower() == norm:
+                self._ue_folder_combo.setCurrentIndex(i)
+                return
+
+        self._ue_folder_combo.addItem(path)
+        idx = self._ue_folder_combo.count() - 1
+        self._ue_folder_combo.setItemData(idx, path, Qt.UserRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._ue_folder_combo.setCurrentIndex(idx)
+
+    def _on_ue_dir_changed(self):
+        """Called when the user selects/browses a new UE directory."""
+        ue_dir = self._current_ue_root
+        if not ue_dir or not os.path.isdir(ue_dir):
+            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM};")
+            self._applied_version_label.setText("")
+            self._update_apply_buttons()
+            return
+
+        # Detect what version is currently applied
+        applied = FilePatcher.detect_applied_version(ue_dir, self._versions)
+        if applied:
+            self._applied_version_label.setStyleSheet(f"color: {C_ACCENT_GREEN}; font-weight: 600;")
+            self._applied_version_label.setText(f"\u2714 Applied: {applied}")
+        else:
+            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM};")
+            self._applied_version_label.setText("No version applied")
+
+        self._update_apply_buttons()
+
     # ── Version Discovery ──
 
     def _discover_versions(self):
+        self._version_picker.blockSignals(True)
         self._version_picker.clear()
-        self._version_picker.addItem("(none)")
-        self._version_picker.setCurrentIndex(0)
         self._changelog.clear()
 
         try:
             self._versions = discover_versions(self._versions_root)
             if self._versions:
-                self._version_picker.clear()
                 for v in self._versions:
                     self._version_picker.addItem(f"{v.engine_version}  (UE {v.unreal_version})")
                 self._version_picker.setCurrentIndex(len(self._versions) - 1)
@@ -221,36 +286,30 @@ class PatcherTab(QWidget):
                 )
 
             self._update_apply_buttons()
-            self._status_label.setStyleSheet(f"color: {C_TEXT_DIM};")
-            self._status_label.setText(f"Ready \u2014 {len(self._versions)} engine version(s) loaded.")
-            self._update_applied_indicator()
+            self._on_ue_dir_changed()
 
         except Exception as e:
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
             self._status_label.setText(f"Error discovering versions: {e}")
+
+        self._version_picker.blockSignals(False)
 
     # ── Event Handlers ──
 
     def _on_version_selected(self, idx: int):
         if idx < 0 or idx >= len(self._versions):
             self._changelog.setPlainText("No version selected.")
-            self._update_applied_indicator()
             return
 
         version = self._versions[idx]
-
-        if version.unreal_dir:
-            self._engine_dir.setText(version.unreal_dir)
 
         # Build changelog with parent inheritance
         text_parts = [
             f"=== Rock Pocket Engine {version.engine_version} ===  (UE {version.unreal_version})\n"
         ]
-
         if version.changelog:
             text_parts.append(f"Changelog:\n{version.changelog}\n")
 
-        # Add parent changelogs
         parent_version = version.parent_version
         visited = set()
         while parent_version and parent_version.lower() not in visited:
@@ -267,59 +326,6 @@ class PatcherTab(QWidget):
         self._changelog.setPlainText("".join(text_parts))
         self._changelog.verticalScrollBar().setValue(0)
         self._update_apply_buttons()
-        self._update_applied_indicator()
-
-    def _on_browse_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Unreal Engine Installation Directory")
-        if path:
-            self._engine_dir.setText(path)
-
-    # ── Registry / Auto-detect ──
-
-    def _refresh_detected_paths(self):
-        """Re-scan registry and filesystem for UE installations and populate the detect combo."""
-        self._detect_combo.clear()
-        self._detect_combo.addItem("(select an installation...)")
-
-        paths = discover_ue_installations()
-        for p in paths:
-            self._detect_combo.addItem(p)
-
-        if paths:
-            self._detect_combo.addItem("")
-            self._detect_combo.addItem("Browse for a different folder... (opens file dialog)")
-            self._detect_combo.currentIndexChanged.connect(self._on_detect_combo_changed)
-
-    def _on_detect_combo_changed(self, idx: int):
-        """Handle selection from the detect combo — 'Browse...' entry opens a file dialog."""
-        if idx <= 0:
-            return
-        text = self._detect_combo.currentText().strip()
-
-        # Check if user selected the "Browse..." placeholder
-        if "Browse" in text:
-            path = QFileDialog.getExistingDirectory(self, "Select Unreal Engine Installation Directory")
-            if path:
-                self._engine_dir.setText(path)
-            # Reset combo to the placeholder
-            self._detect_combo.setCurrentIndex(0)
-            return
-
-        if os.path.isdir(text):
-            self._engine_dir.setText(text)
-            self._engine_dir.setCursorPosition(len(text))
-
-    def _on_detect_set(self):
-        """Set the engine dir to the currently selected detected path."""
-        idx = self._detect_combo.currentIndex()
-        if idx <= 0:
-            return
-        text = self._detect_combo.currentText().strip()
-        if os.path.isdir(text):
-            self._engine_dir.setText(text)
-            self._engine_dir.setCursorPosition(len(text))
-        else:
-            self._detect_combo.setCurrentIndex(0)
 
     def _on_apply(self, custom_engine: bool):
         idx = self._version_picker.currentIndex()
@@ -329,7 +335,7 @@ class PatcherTab(QWidget):
             return
 
         version = self._versions[idx]
-        ue_dir = self._engine_dir.text().strip()
+        ue_dir = self._current_ue_root
 
         if not ue_dir or not os.path.isdir(ue_dir):
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
@@ -372,7 +378,8 @@ class PatcherTab(QWidget):
         self._operation_label.setVisible(True)
         self._operation_progress.setVisible(True)
 
-        # Run in background thread
+        ver_name = version.engine_version
+
         def work():
             try:
                 if custom_engine:
@@ -386,10 +393,10 @@ class PatcherTab(QWidget):
             except Exception as e:
                 result = PatchResult(success=False, message=str(e))
 
-            # Call finish on main thread via signal
-            self._finish_apply(result, version.engine_version)
+            self._patch_finished.emit(result, ver_name)
 
-        QThread.start(QThread(target=work))
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
 
     def _finish_apply(self, result: PatchResult, version_name: str):
         self._operation_label.setVisible(False)
@@ -400,21 +407,10 @@ class PatcherTab(QWidget):
         if result.success:
             self._status_label.setStyleSheet(f"color: {C_ACCENT_GREEN};")
             self._status_label.setText(f"Success: {result.message}")
-            self._update_applied_indicator(version_name)
+            self._on_ue_dir_changed()  # Refresh applied indicator (reads marker)
         else:
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
             self._status_label.setText(f"Failed: {result.message}")
-
-    def _on_settings(self):
-        version_names = ", ".join(v.engine_version for v in self._versions) if self._versions else "(none)"
-        QMessageBox.information(
-            self,
-            "Version Settings",
-            "Full version management (add/edit/remove versions and file mappings)\n"
-            "will be available in an upcoming release.\n\n"
-            f"Versions found: {version_names}\n\n"
-            f"Version files stored at:\n{self._versions_root}",
-        )
 
     def _on_info(self):
         mode = "Source Mode (copies .h/.cpp files only)" if self._source_mode else "Engine Mode (copies binaries and all files)"
@@ -435,11 +431,18 @@ class PatcherTab(QWidget):
         self._source_mode_btn.setText("Source Mode" if self._source_mode else "Engine Mode")
         self._update_apply_buttons()
 
+    def _on_manage_versions(self):
+        """Open the Version Manager dialog."""
+        dlg = VersionManagerDialog(self, versions_root=self._versions_root)
+        dlg.exec()
+        # Re-discover versions regardless of changes (handles external edits too)
+        self._discover_versions()
+
     # ── Helpers ──
 
     def _update_apply_buttons(self):
         has_version = 0 <= self._version_picker.currentIndex() < len(self._versions)
-        has_dir = bool(self._engine_dir.text().strip()) and os.path.isdir(self._engine_dir.text().strip())
+        has_dir = bool(self._current_ue_root) and os.path.isdir(self._current_ue_root)
         self._apply_custom_btn.setEnabled(has_version and has_dir and not self._is_working)
         self._apply_default_btn.setEnabled(has_version and has_dir and not self._is_working)
 
@@ -447,16 +450,8 @@ class PatcherTab(QWidget):
         self._apply_custom_btn.setEnabled(enabled)
         self._apply_default_btn.setEnabled(enabled)
         self._source_mode_btn.setEnabled(enabled)
+        self._manage_btn.setEnabled(enabled)
         self._browse_btn.setEnabled(enabled)
-        self._settings_btn.setEnabled(enabled)
         self._info_btn.setEnabled(enabled)
-        self._engine_dir.setEnabled(enabled)
+        self._ue_folder_combo.setEnabled(enabled)
         self._version_picker.setEnabled(enabled)
-
-    def _update_applied_indicator(self, version_name: Optional[str] = None):
-        if version_name:
-            self._applied_version_label.setStyleSheet(f"color: {C_ACCENT_GREEN}; font-weight: 600;")
-            self._applied_version_label.setText(f"\u2714 Applied: {version_name}")
-        else:
-            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM};")
-            self._applied_version_label.setText("No version applied")

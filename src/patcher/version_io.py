@@ -7,7 +7,7 @@ Each file entry: 3 length-prefixed strings (pathCustom, pathDefault, pathTarget)
 
 import os
 import struct
-from typing import List
+from typing import List, Optional
 
 from models import EngineFile, EngineInfo
 
@@ -118,3 +118,52 @@ def discover_versions(versions_root: str) -> List[EngineInfo]:
                     pass  # Skip malformed files
 
     return versions
+
+
+def create_version(
+    versions_root: str,
+    engine_version: str,
+    unreal_version: str = "",
+    parent_version: str = "",
+    clone_from: Optional[EngineInfo] = None,
+) -> EngineInfo:
+    """Create a new engine version with an empty info.dat.
+
+    If clone_from is provided, copies its file entries (paths remain
+    relative to the cloned version's directory and will need updating).
+    """
+    ver_dir = os.path.join(versions_root, engine_version)
+    if os.path.isdir(ver_dir):
+        raise FileExistsError(f"Version '{engine_version}' already exists at {ver_dir}")
+
+    os.makedirs(ver_dir, exist_ok=True)
+
+    files: List[EngineFile] = []
+    if clone_from:
+        files = [
+            EngineFile(path_custom=f.path_custom, path_default=f.path_default,
+                       path_target=f.path_target, local_name=f.local_name)
+            for f in clone_from.files
+        ]
+
+    info = EngineInfo(
+        info_dir=os.path.join(ver_dir, "info.dat"),
+        engine_version=engine_version,
+        parent_version=parent_version,
+        unreal_version=unreal_version,
+        unreal_dir="",
+        changelog="",
+        files=files,
+    )
+    write_info(info)
+    return info
+
+
+def delete_version(version: EngineInfo) -> None:
+    """Delete a version's directory and all its contents."""
+    ver_dir = os.path.dirname(version.info_dir)
+    if not os.path.isdir(ver_dir):
+        raise FileNotFoundError(f"Version directory not found: {ver_dir}")
+    import shutil
+    shutil.rmtree(ver_dir)
+
