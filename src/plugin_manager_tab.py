@@ -40,11 +40,15 @@ class ScanWorker(QObject):
 
 
 class SortableTreeItem(QTreeWidgetItem):
-    """QTreeWidgetItem that sorts Enabled column by checkbox state."""
+    """QTreeWidgetItem that sorts Enabled column by checkbox state, with name as tie-breaker."""
     def __lt__(self, other):
         col = self.treeWidget().sortColumn() if self.treeWidget() else 0
         if col == 0:
-            return other.checkState(col).value < self.checkState(col).value
+            a, b = self.checkState(col).value, other.checkState(col).value
+            if a != b:
+                return b < a  # descending: checked (2) before unchecked (0)
+            # Same checkbox state — secondary sort by name
+            return self.text(self.treeWidget().COL_NAME).lower() < other.text(self.treeWidget().COL_NAME).lower()
         return self.text(col).lower() < other.text(col).lower()
 
 
@@ -201,6 +205,7 @@ class PluginManagerTab(QWidget):
         # Columns: Enabled sizes to content, description fills remaining space
         header = self._tree.header()
         header.setStretchLastSection(False)
+        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
         header.resizeSection(self.COL_NAME, 220)
