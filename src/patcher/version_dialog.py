@@ -54,10 +54,10 @@ def _module_name_from_path(rel_path: str) -> str:
 
 
 def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
-    """Scan Engine/Binaries/Win64 for .dll, .exe, .pdb files matching the given module names.
+    """Scan Engine/Binaries/Win64 for .dll, .exe, .pdb, .lib, .target files matching the given module names.
 
-    Binary naming pattern: UnrealEditor-{ModuleName}.dll / .pdb / .exe
-    Only binaries for modules present in *source_modules* are returned.
+    Binary naming pattern: UnrealEditor-{ModuleName}.dll / .pdb / .lib / .target
+    Only files for modules present in *source_modules* are returned.
     Returns list of (relative_path, abs_path) tuples.
     """
     bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Win64")
@@ -67,10 +67,12 @@ def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
     # Build set of expected prefixes: UnrealEditor-<Module>.
     prefixes = {f"UnrealEditor-{m}." for m in source_modules if m}
 
+    intermediate_exts = {".dll", ".exe", ".pdb", ".lib", ".target"}
+
     results = []
     for fn in sorted(os.listdir(bin_dir)):
         ext = os.path.splitext(fn)[1].lower()
-        if ext not in {".dll", ".exe", ".pdb"}:
+        if ext not in intermediate_exts:
             continue
         # Check if filename starts with any of the expected prefixes
         for prefix in prefixes:
@@ -108,7 +110,7 @@ class FileEntryDialog(QDialog):
 
         # Instructions
         layout.addWidget(QLabel("Select one or more files to add as patch entries."))
-        layout.addWidget(QLabel("Module binaries are auto-included based on selected source files."))
+        layout.addWidget(QLabel("Module binaries and intermediates are auto-included based on selected source files."))
 
         # Browse button
         browse_row = QHBoxLayout()
