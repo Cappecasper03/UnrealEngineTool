@@ -78,8 +78,13 @@ class PluginManagerTab(QWidget):
         self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         # Hide the dropdown arrow — selection happens via Browse button
         self._ue_folder_combo.setStyleSheet(
-            "QComboBox::drop-down { width: 0px; border: none; }"
-            "QComboBox::down-arrow { image: none; }"
+            "QComboBox { padding-right: 0px; }"
+            "QComboBox::drop-down { "
+            "  subcontrol-origin: padding;"
+            "  subcontrol-position: top right;"
+            "  width: 0px; border: none; background: transparent;"
+            "}"
+            "QComboBox::down-arrow { image: none; border: none; }"
         )
         self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
         folder_row.addWidget(self._ue_folder_combo)
@@ -314,9 +319,10 @@ class PluginManagerTab(QWidget):
 
         self._ue_folder_combo.blockSignals(False)
 
-        # Auto-select the first discovered installation
+        # Auto-select and scan the first discovered installation
         if paths:
             self._ue_folder_combo.setCurrentIndex(0)
+            self._on_folder_selected(0)
 
     # ── Event Handlers ──
 
