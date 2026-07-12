@@ -2,6 +2,7 @@
 
 import os
 import threading
+from datetime import datetime
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Signal, QObject, QThread
@@ -85,6 +86,12 @@ class PluginManagerTab(QWidget):
 
         layout.addLayout(folder_row)
 
+        # Selected path label
+        self._ue_path_label = QLabel("")
+        self._ue_path_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 11px; padding: 0 0 2px 4px;")
+        self._ue_path_label.setVisible(False)
+        layout.addWidget(self._ue_path_label)
+
         # Scanning overlay
         scan_row = QHBoxLayout()
         self._scanning_label = QLabel("Scanning plugins...")
@@ -167,16 +174,13 @@ class PluginManagerTab(QWidget):
 
         # Toolbar row 2: search
         toolbar2 = QHBoxLayout()
-        search_icon = QLabel("\U0001F50D  ")
-        toolbar2.addWidget(search_icon)
 
         self._search_box = QLineEdit()
         self._search_box.setPlaceholderText("Search by name, friendly name, or description...")
         self._search_box.textChanged.connect(self._on_search_changed)
         toolbar2.addWidget(self._search_box, 1)
 
-        self._clear_search_btn = QPushButton("\u2715")
-        self._clear_search_btn.setFixedWidth(32)
+        self._clear_search_btn = QPushButton("Clear")
         self._clear_search_btn.clicked.connect(self._on_clear_search)
         toolbar2.addWidget(self._clear_search_btn)
 
@@ -231,6 +235,16 @@ class PluginManagerTab(QWidget):
             color: {C_TEXT_BRIGHT};
             padding: 4px 0 2px 0;
         """)
+        return label
+
+    @staticmethod
+    def _format_ue_path(path: str) -> str:
+        """Format a UE path like 'C:\\...\\UE_5.5' into a display name 'UE 5.5'."""
+        base = os.path.basename(os.path.normpath(path))
+        if base.upper().startswith("UE_"):
+            label = "UE " + base[3:]
+        else:
+            label = base
         return label
 
     @staticmethod
@@ -300,10 +314,11 @@ class PluginManagerTab(QWidget):
         # Auto-discover from registry + common filesystem locations
         paths = discover_ue_installations()
         for p in paths:
-            self._ue_folder_combo.addItem(p)
-            self._ue_folder_combo.setItemData(
-                self._ue_folder_combo.count() - 1, p, Qt.ToolTipRole,
-            )
+            display = self._format_ue_path(p)
+            self._ue_folder_combo.addItem(display)
+            idx = self._ue_folder_combo.count() - 1
+            self._ue_folder_combo.setItemData(idx, p, Qt.UserRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ToolTipRole)
 
         self._ue_folder_combo.blockSignals(False)
 
@@ -315,8 +330,12 @@ class PluginManagerTab(QWidget):
 
     def _on_folder_selected(self, index: int):
         if index <= 0:
+            self._current_ue_root = ""
+            self._ue_path_label.setVisible(False)
             return
-        self._current_ue_root = self._ue_folder_combo.currentText()
+        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or self._ue_folder_combo.currentText()
+        self._ue_path_label.setText(self._current_ue_root)
+        self._ue_path_label.setVisible(True)
         self._start_scan()
 
     def _on_browse(self):
@@ -330,14 +349,20 @@ class PluginManagerTab(QWidget):
             self._status_label.setStyleSheet(f"color: {C_ACCENT_ORANGE};")
             self._status_label.setText("Warning: selected directory does not look like a UE installation.")
 
-        # Check if already in combo
+        # Check if already in combo (match on stored path)
+        norm_path = os.path.normpath(path).lower()
         for i in range(self._ue_folder_combo.count()):
-            if self._ue_folder_combo.itemText(i).lower() == path.lower():
+            stored = self._ue_folder_combo.itemData(i, Qt.UserRole)
+            if stored and os.path.normpath(stored).lower() == norm_path:
                 self._ue_folder_combo.setCurrentIndex(i)
                 return
 
-        self._ue_folder_combo.addItem(path)
-        self._ue_folder_combo.setCurrentIndex(self._ue_folder_combo.count() - 1)
+        display = self._format_ue_path(path)
+        self._ue_folder_combo.addItem(display)
+        idx = self._ue_folder_combo.count() - 1
+        self._ue_folder_combo.setItemData(idx, path, Qt.UserRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._ue_folder_combo.setCurrentIndex(idx)
 
     def _start_scan(self):
         self._is_scanning = True
@@ -387,6 +412,19 @@ class PluginManagerTab(QWidget):
         self._set_action_buttons_enabled(True)
         self._refresh_view()
         self._update_stats()
+        self._auto_save_backup()
+
+    def _auto_save_backup(self):
+        """Save an automatic timestamped backup after a fresh scan."""
+        if not self._current_ue_root or not self._plugins:
+            return
+        backup_dir = self._backup_dir()
+        os.makedirs(backup_dir, exist_ok=True)
+        version = os.path.basename(self._current_ue_root.rstrip("/\\"))
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(backup_dir, f"auto_{version}_{ts}.backup")
+        self._backup.save_backup(path, self._plugins, self._current_ue_root)
+        self._status_label.setText(f"Auto-backup saved: {os.path.basename(path)}")
 
     def _on_scan_error(self, error_msg: str):
         self._scanning_label.setVisible(False)
@@ -498,15 +536,26 @@ class PluginManagerTab(QWidget):
         ]
         self._update_stats()
 
+    def _backup_dir(self) -> str:
+        """Return the auto backup directory path."""
+        return os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "UnrealEngineTool", "backups",
+        )
+
     def _on_save_backup(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save Backup", "", "Backup Files (*.backup);;All Files (*)")
+        backup_dir = self._backup_dir()
+        os.makedirs(backup_dir, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(self, "Save Backup", backup_dir, "Backup Files (*.backup);;All Files (*)")
         if not path:
             return
         self._backup.save_backup(path, self._plugins, self._current_ue_root)
         QMessageBox.information(self, "Backup Saved", f"Backup saved to:\n{path}")
 
     def _on_load_backup(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load Backup", "", "Backup Files (*.backup);;All Files (*)")
+        backup_dir = self._backup_dir()
+        os.makedirs(backup_dir, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(self, "Load Backup", backup_dir, "Backup Files (*.backup);;All Files (*)")
         if not path:
             return
         count = self._backup.load_backup(path, self._plugins, self._current_ue_root)
