@@ -15,7 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QTabWidget, QStatusBar,
+    QApplication, QMainWindow, QTabWidget,
     QVBoxLayout, QWidget,
 )
 
@@ -54,18 +54,6 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._patcher_tab, "  Patcher  ")
 
         layout.addWidget(self._tabs, 1)
-
-        # Status bar
-        self._status_bar = QStatusBar()
-        self._status_bar.showMessage("Ready")
-        self.setStatusBar(self._status_bar)
-
-        # Tab switch handler
-        self._tabs.currentChanged.connect(self._on_tab_changed)
-
-    def _on_tab_changed(self, index: int):
-        text = self._tabs.tabText(index).strip()
-        self._status_bar.showMessage(f"Tab: {text}")
 
 
 def main():
