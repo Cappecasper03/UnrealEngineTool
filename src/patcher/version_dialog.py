@@ -222,7 +222,8 @@ class FileEntryDialog(QDialog):
 
         # Instructions
         instr = QLabel(
-            "Select one or more files to add as patch entries.\n"
+            "Select engine source or binary files to add as patch entries.\n"
+            "Only files inside an Engine/ directory are accepted.\n"
             "Module binaries and intermediates are auto-included based on selected source files."
         )
         instr.setWordWrap(True)
@@ -269,6 +270,18 @@ class FileEntryDialog(QDialog):
             self, "Select Files to Add as Patch Entries"
         )
         if not paths:
+            return
+
+        # Validate every file is inside an Engine/ directory
+        non_engine = [p for p in paths if not _find_engine_root(p)]
+        if non_engine:
+            names = "\n".join(os.path.basename(p) for p in non_engine[:5])
+            if len(non_engine) > 5:
+                names += f"\n... and {len(non_engine) - 5} more"
+            QMessageBox.warning(
+                self, "Non-Engine Files",
+                f"These files are not inside an Engine/ directory and cannot be used:\n\n{names}"
+            )
             return
 
         self._entries.clear()
