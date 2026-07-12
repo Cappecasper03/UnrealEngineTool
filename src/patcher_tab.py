@@ -310,7 +310,7 @@ class PatcherTab(QWidget):
             self._versions = discover_versions(self._versions_root)
             if self._versions:
                 for v in self._versions:
-                    self._version_picker.addItem(f"{v.engine_version}  (UE {v.unreal_version})")
+                    self._version_picker.addItem(f"{v.engine_version}  ({v.unreal_dir})" if v.unreal_dir else v.engine_version)
                 self._version_picker.setCurrentIndex(len(self._versions) - 1)
                 self._on_version_selected(len(self._versions) - 1)
                 self._version_count_label.setText(f"{len(self._versions)} patch(es)")
