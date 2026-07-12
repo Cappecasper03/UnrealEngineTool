@@ -84,7 +84,8 @@ def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
     return results
 
 
-def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tuple]:
+def _discover_module_intermediates(ue_root: str, source_modules: set,
+                                   source_stems: set = set()) -> List[tuple]:
     """Scan Engine/Intermediate/Build/Win64/ for generated and precompiled files.
 
     Actual UE path structure:
@@ -92,6 +93,10 @@ def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tu
         Inc/{Module}/.../{File}.generated.h
         Development/{Module}/{File}.cpp.obj / .h.obj / .precompiled
         Shipping/{Module}/{File}.cpp.obj / .h.obj / .precompiled
+
+    *source_stems* are base names of selected source files (e.g. "HomeScreenSettings").
+    Only .generated.h files whose stem (base.generated.h  →  base) matches one of
+    *source_stems* are returned.
 
     Returns list of (relative_path, abs_path) tuples.
     """
@@ -104,6 +109,7 @@ def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tu
 
     # Normalise module names for case-insensitive comparison
     module_lower = {m.lower() for m in source_modules if m}
+    stem_lower = {s.lower() for s in source_stems if s}
 
     results = []
     precompiled_exts = {".cpp.obj", ".h.obj", ".precompiled"}
@@ -126,6 +132,11 @@ def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tu
                     path_parts = rel_under_inc.split("/")
                     if not path_parts or path_parts[0].lower() not in module_lower:
                         continue
+                    # Only include .generated.h whose stem matches a selected source file
+                    if stem_lower:
+                        file_stem = fn[:-len(".generated.h")]
+                        if file_stem.lower() not in stem_lower:
+                            continue
                     full_rel = f"Engine/Intermediate/Build/Win64/{target}/Inc/{rel_under_inc}/{fn}"
                     results.append((full_rel, os.path.join(root, fn)))
 
@@ -241,12 +252,19 @@ class FileEntryDialog(QDialog):
             if ue_root:
                 all_ue_roots.add(ue_root)
 
-        # Collect module names from user-picked source files
+        # Collect module names and source file stems from user-picked files
         source_modules = set()
+        source_stems = set()
         for entry in self._entries:
-            mod = _module_name_from_path(entry.path_custom)
+            rel = entry.path_custom
+            mod = _module_name_from_path(rel)
             if mod:
                 source_modules.add(mod)
+            # Collect base name of source files (without extension) for .generated.h matching
+            if rel.lower().startswith("engine/source/"):
+                stem = os.path.splitext(os.path.basename(rel))[0]
+                if stem:
+                    source_stems.add(stem)
 
         # Auto-discover matching module binaries from any detected UE roots
         binary_count_total = 0
@@ -270,7 +288,7 @@ class FileEntryDialog(QDialog):
         for ue_root in all_ue_roots:
             for rel_path, abs_path in _discover_binaries(ue_root, source_modules):
                 binary_count_total = _add_discovered(rel_path, abs_path, "bin", binary_count_total)
-            for rel_path, abs_path in _discover_module_intermediates(ue_root, source_modules):
+            for rel_path, abs_path in _discover_module_intermediates(ue_root, source_modules, source_stems):
                 intermediate_count_total = _add_discovered(rel_path, abs_path, "int", intermediate_count_total)
 
         info_parts = [f"{len([e for e in self._entries if '[bin]' not in e.path_custom and '[int]' not in e.path_custom])} file(s) selected"]
