@@ -159,12 +159,6 @@ class PluginManagerTab(QWidget):
         self._load_template_btn.clicked.connect(self._on_load_template)
         toolbar1.addWidget(self._load_template_btn)
 
-        toolbar1.addWidget(self._make_vsep())
-
-        self._minimal_btn = QPushButton("Minimal Preset")
-        self._minimal_btn.clicked.connect(self._on_minimal_preset)
-        toolbar1.addWidget(self._minimal_btn)
-
         toolbar1.addStretch(1)
 
         self._revert_btn = QPushButton("Revert Changes")
@@ -295,7 +289,6 @@ class PluginManagerTab(QWidget):
         self._load_backup_btn.setEnabled(enabled)
         self._save_template_btn.setEnabled(enabled)
         self._load_template_btn.setEnabled(enabled)
-        self._minimal_btn.setEnabled(enabled)
         self._revert_btn.setEnabled(enabled)
         self._search_box.setEnabled(enabled)
         self._clear_search_btn.setEnabled(enabled)
@@ -580,14 +573,3 @@ class PluginManagerTab(QWidget):
         count = self._backup.load_template(path, self._plugins)
         self._refresh_view()
         QMessageBox.information(self, "Template Loaded", f"Applied template: {count} plugins enabled.")
-
-    def _on_minimal_preset(self):
-        reply = QMessageBox.question(
-            self, "Apply Minimal Preset",
-            "This will disable all plugins except essential engine plugins. Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        self._backup.apply_minimal(self._plugins)
-        self._refresh_view()
