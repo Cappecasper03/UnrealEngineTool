@@ -44,13 +44,18 @@ class SortableTreeItem(QTreeWidgetItem):
     COL_NAME = 1
 
     def __lt__(self, other):
-        col = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        tw = self.treeWidget()
+        col = tw.sortColumn() if tw else 0
         if col == 0:
             a, b = self.checkState(col).value, other.checkState(col).value
             if a != b:
-                return a < b  # ascending: unchecked (0) before checked (2)
-            # Same checkbox state — secondary sort by name
-            return self.text(self.COL_NAME).lower() < other.text(self.COL_NAME).lower()
+                return a < b  # ascending definition (Qt negates for descending)
+            # Same checkbox state — name a-z regardless of sort direction
+            n1, n2 = self.text(self.COL_NAME).lower(), other.text(self.COL_NAME).lower()
+            order = tw.header().sortIndicatorOrder()
+            if order == Qt.DescendingOrder:
+                return n2 < n1  # reversed so Qt's negation turns it back to a-z
+            return n1 < n2      # ascending: a-z directly
         return self.text(col).lower() < other.text(col).lower()
 
 
@@ -207,7 +212,7 @@ class PluginManagerTab(QWidget):
         # Columns: Enabled sizes to content, description fills remaining space
         header = self._tree.header()
         header.setStretchLastSection(False)
-        header.setSortIndicator(self.COL_ENABLED, Qt.AscendingOrder)
+        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
         header.resizeSection(self.COL_NAME, 220)
