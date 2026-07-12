@@ -15,7 +15,40 @@ from PySide6.QtWidgets import (
 from models import EngineInfo, EngineFile
 from patcher.version_io import read_info, write_info, create_version, delete_version, discover_versions
 from registry_helper import discover_ue_installations
-from theme import C_ACCENT, C_ACCENT_GREEN, C_ACCENT_RED, C_TEXT_DIM, C_TEXT_BRIGHT, C_BORDER, C_BG, C_SURFACE2
+from theme import C_TEXT_DIM, C_CARD, C_CARD_BORDER
+
+
+# ── Card helper (shared with tabs) ──
+
+def _make_section_card(title: str) -> tuple:
+    """Create a styled section card with header."""
+    card = QFrame()
+    card.setObjectName("dialogSectionCard")
+    card.setStyleSheet(f"""
+        QFrame#dialogSectionCard {{
+            background-color: {C_CARD};
+            border: 1px solid {C_CARD_BORDER};
+            border-radius: 6px;
+        }}
+    """)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(12, 8, 12, 10)
+    card_layout.setSpacing(6)
+
+    header = QLabel(title)
+    header.setStyleSheet(f"""
+        font-size: 11px;
+        font-weight: 700;
+        color: {C_TEXT_DIM};
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0;
+        background: transparent;
+    """)
+    card_layout.addWidget(header)
+
+    return card, card_layout
 
 
 # ── File Entry Adder (multi-file selection + auto binary detection) ──
@@ -43,7 +76,7 @@ def _find_engine_root(path: str) -> str:
 def _module_name_from_path(rel_path: str) -> str:
     """Extract the UE module name from an engine-relative source path.
 
-    Engine/Source/{Category}/{ModuleName}/...  →  ModuleName
+    Engine/Source/{Category}/{ModuleName}/...  ->  ModuleName
     Returns empty string if the path isn't under Engine/Source/.
     """
     # Normalise and split
@@ -96,7 +129,7 @@ def _discover_module_intermediates(ue_root: str, source_modules: set,
         Shipping/{Module}/{File}.cpp.obj / .h.obj / .precompiled
 
     *source_stems* are base names of selected source files (e.g. "HomeScreenSettings").
-    Only .generated.h files whose stem (base.generated.h  →  base) matches one of
+    Only .generated.h files whose stem (base.generated.h  ->  base) matches one of
     *source_stems* are returned.
 
     Returns list of (relative_path, abs_path) tuples.
@@ -184,11 +217,17 @@ class FileEntryDialog(QDialog):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 8, 12, 12)
+        layout.setSpacing(8)
 
         # Instructions
-        layout.addWidget(QLabel("Select one or more files to add as patch entries."))
-        layout.addWidget(QLabel("Module binaries and intermediates are auto-included based on selected source files."))
+        instr = QLabel(
+            "Select one or more files to add as patch entries.\n"
+            "Module binaries and intermediates are auto-included based on selected source files."
+        )
+        instr.setWordWrap(True)
+        instr.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; padding: 0; background: transparent;")
+        layout.addWidget(instr)
 
         # Browse button
         browse_row = QHBoxLayout()
@@ -206,7 +245,7 @@ class FileEntryDialog(QDialog):
 
         # Selected files count / binary info
         self._info_label = QLabel("")
-        self._info_label.setStyleSheet("color: #808080; font-size: 11px;")
+        self._info_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 11px; padding: 0; background: transparent;")
         layout.addWidget(self._info_label)
 
         # Buttons
@@ -214,6 +253,7 @@ class FileEntryDialog(QDialog):
         btn_row.addStretch(1)
 
         self._add_btn = QPushButton("Add Files")
+        self._add_btn.setProperty("class", "primary")
         self._add_btn.setEnabled(False)
         self._add_btn.clicked.connect(self._on_add)
         btn_row.addWidget(self._add_btn)
@@ -270,7 +310,7 @@ class FileEntryDialog(QDialog):
         # Auto-discover matching module binaries from any detected UE roots
         binary_count_total = 0
         intermediate_count_total = 0
-        
+
         def _add_discovered(rel_path: str, abs_path: str, tag: str, counter: int) -> int:
             """Add a discovered file entry, skipping duplicates. Returns new count."""
             if any(e.path_custom == rel_path for e in self._entries):
@@ -314,7 +354,7 @@ class FileEntryDialog(QDialog):
         return self._copied_abs
 
 
-# ── Version Manager Dialog ──
+# ── Hidden combo QSS ──
 
 _COMBO_QSS = (
     "QComboBox { padding-right: 0px; }"
@@ -346,86 +386,117 @@ class VersionManagerDialog(QDialog):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
-        # ── Top: patch list (left) + details (right) ──
+        # ════════════════════════════════════════════
+        # Top row: patch list (left) + details (right)
+        # ════════════════════════════════════════════
         top_row = QHBoxLayout()
         top_row.setSpacing(10)
 
-        # Left: patch list
-        left_panel = QVBoxLayout()
-        left_panel.setSpacing(4)
-
-        left_panel.addWidget(QLabel("Patches"))
+        # ── Left panel: Patch List ──
+        left_card, lc = _make_section_card("Patches")
 
         self._version_list = QListWidget()
         self._version_list.setMinimumWidth(160)
         self._version_list.currentRowChanged.connect(self._on_selection_changed)
-        left_panel.addWidget(self._version_list, 1)
+        lc.addWidget(self._version_list, 1)
 
+        # List action buttons
         list_btn_row = QHBoxLayout()
+        list_btn_row.setSpacing(4)
+
         self._new_btn = QPushButton("New")
+        self._new_btn.setObjectName("toolBtn")
         self._new_btn.clicked.connect(self._on_new)
         list_btn_row.addWidget(self._new_btn)
 
         self._clone_btn = QPushButton("Clone")
+        self._clone_btn.setObjectName("toolBtn")
         self._clone_btn.setEnabled(False)
         self._clone_btn.clicked.connect(self._on_clone)
         list_btn_row.addWidget(self._clone_btn)
 
         self._delete_btn = QPushButton("Delete")
+        self._delete_btn.setProperty("class", "danger")
         self._delete_btn.setEnabled(False)
         self._delete_btn.clicked.connect(self._on_delete)
         list_btn_row.addWidget(self._delete_btn)
 
-        left_panel.addLayout(list_btn_row)
-        top_row.addLayout(left_panel)
+        lc.addLayout(list_btn_row)
+        top_row.addWidget(left_card)
 
-        # Right: patch details
-        right_panel = QVBoxLayout()
-        right_panel.setSpacing(6)
-
-        right_panel.addWidget(QLabel("Patch Details"))
+        # ── Right panel: Patch Details ──
+        right_card, rc = _make_section_card("Patch Details")
 
         det_grid = QGridLayout()
-        det_grid.setSpacing(5)
+        det_grid.setSpacing(6)
+        det_grid.setColumnStretch(0, 0)
+        det_grid.setColumnStretch(1, 1)
+        det_grid.setColumnStretch(2, 0)
 
-        det_grid.addWidget(QLabel("Patch Name:"), 0, 0)
+        # Patch Name
+        name_label = QLabel("Name:")
+        name_label.setStyleSheet("background: transparent;")
+        det_grid.addWidget(name_label, 0, 0)
+
         self._ver_name = QLineEdit()
         self._ver_name.setPlaceholderText("e.g. v1.0")
-        det_grid.addWidget(self._ver_name, 0, 1)
+        det_grid.addWidget(self._ver_name, 0, 1, 1, 2)
 
-        det_grid.addWidget(QLabel("Original Engine:"), 1, 0)
+        # Original Engine
+        orig_label = QLabel("Original Engine:")
+        orig_label.setStyleSheet("background: transparent;")
+        det_grid.addWidget(orig_label, 1, 0)
+
+        orig_combo_row = QHBoxLayout()
+        orig_combo_row.setSpacing(4)
         self._orig_engine_combo = QComboBox()
         self._orig_engine_combo.setStyleSheet(_COMBO_QSS)
         self._orig_engine_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._orig_engine_combo.currentIndexChanged.connect(self._on_orig_engine_selected)
-        det_grid.addWidget(self._orig_engine_combo, 1, 1)
-        self._orig_engine_browse = QPushButton("Browse\u2026")
-        self._orig_engine_browse.clicked.connect(self._on_browse_orig_engine)
-        det_grid.addWidget(self._orig_engine_browse, 1, 2)
+        orig_combo_row.addWidget(self._orig_engine_combo)
 
-        det_grid.addWidget(QLabel("Parent Patch:"), 2, 0)
+        self._orig_engine_browse = QPushButton("Browse\u2026")
+        self._orig_engine_browse.setObjectName("toolBtn")
+        self._orig_engine_browse.clicked.connect(self._on_browse_orig_engine)
+        orig_combo_row.addWidget(self._orig_engine_browse)
+
+        det_grid.addLayout(orig_combo_row, 1, 1, 1, 2)
+
+        # Parent Patch
+        parent_label = QLabel("Parent:")
+        parent_label.setStyleSheet("background: transparent;")
+        det_grid.addWidget(parent_label, 2, 0)
+
         self._parent_combo = QComboBox()
         self._parent_combo.setStyleSheet(_COMBO_QSS)
         self._parent_combo.addItem("(none)", "")
-        det_grid.addWidget(self._parent_combo, 2, 1)
+        det_grid.addWidget(self._parent_combo, 2, 1, 1, 2)
 
-        det_grid.addWidget(QLabel("Changelog:"), 3, 0, Qt.AlignTop)
+        # Changelog
+        changelog_label = QLabel("Changelog:")
+        changelog_label.setStyleSheet("background: transparent;")
+        changelog_label.setAlignment(Qt.AlignTop)
+        det_grid.addWidget(changelog_label, 3, 0)
+
         self._changelog = QPlainTextEdit()
-        self._changelog.setPlaceholderText("Describe what changed in this patch...")
+        self._changelog.setPlaceholderText("Describe what changed in this patch\u2026")
         self._changelog.setMinimumHeight(70)
-        det_grid.addWidget(self._changelog, 3, 1)
+        det_grid.addWidget(self._changelog, 3, 1, 1, 2)
 
-        right_panel.addLayout(det_grid)
+        rc.addLayout(det_grid)
+        rc.addStretch(1)
 
-        right_panel.addStretch(1)
-        top_row.addLayout(right_panel, 1)
-
+        top_row.addWidget(right_card, 1)
         layout.addLayout(top_row, 1)
 
-        # ── File entries table ──
-        layout.addWidget(QLabel("File Entries"))
+        # ════════════════════════════════════════════
+        # File Entries section
+        # ════════════════════════════════════════════
+        file_card, fc = _make_section_card("File Entries")
+        fc.setContentsMargins(12, 4, 12, 10)
+        fc.setSpacing(4)
 
         self._file_table = QTableWidget(0, 2)
         self._file_table.setHorizontalHeaderLabels(["#", "Engine Path"])
@@ -435,43 +506,66 @@ class VersionManagerDialog(QDialog):
         self._file_table.verticalHeader().setVisible(False)
         self._file_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._file_table.setSelectionMode(QTableWidget.SingleSelection)
-        self._file_table.setMinimumHeight(120)
+        self._file_table.setMinimumHeight(100)
         self._file_table.currentCellChanged.connect(self._on_file_table_selection_changed)
-        layout.addWidget(self._file_table, 1)
+        fc.addWidget(self._file_table, 1)
 
+        # File action buttons
         file_btn_row = QHBoxLayout()
+        file_btn_row.setSpacing(4)
+
         self._file_add_btn = QPushButton("Add Files\u2026")
+        self._file_add_btn.setObjectName("toolBtn")
         self._file_add_btn.setEnabled(False)
         self._file_add_btn.setToolTip("Set an Original Engine path before adding files")
         self._file_add_btn.clicked.connect(self._on_add_file)
         file_btn_row.addWidget(self._file_add_btn)
 
         self._file_remove_btn = QPushButton("Remove")
+        self._file_remove_btn.setProperty("class", "danger")
         self._file_remove_btn.setEnabled(False)
         self._file_remove_btn.clicked.connect(self._on_remove_file)
         file_btn_row.addWidget(self._file_remove_btn)
 
         file_btn_row.addStretch(1)
-        layout.addLayout(file_btn_row)
+        fc.addLayout(file_btn_row)
 
-        # ── Bottom buttons ──
-        btn_row = QHBoxLayout()
+        layout.addWidget(file_card, 1)
+
+        # ════════════════════════════════════════════
+        # Bottom action bar
+        # ════════════════════════════════════════════
+        bottom_bar = QFrame()
+        bottom_bar.setObjectName("bottomBar")
+        bottom_bar.setStyleSheet(f"""
+            QFrame#bottomBar {{
+                background-color: {C_CARD};
+                border: 1px solid {C_CARD_BORDER};
+                border-radius: 6px;
+                padding: 8px;
+            }}
+        """)
+        bottom_layout = QHBoxLayout(bottom_bar)
+        bottom_layout.setContentsMargins(12, 6, 12, 6)
+        bottom_layout.setSpacing(6)
 
         self._save_all_btn = QPushButton("Save All Changes")
+        self._save_all_btn.setProperty("class", "primary")
         self._save_all_btn.clicked.connect(self._on_save_all)
-        btn_row.addWidget(self._save_all_btn)
+        bottom_layout.addWidget(self._save_all_btn)
 
         self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setObjectName("toolBtn")
         self._refresh_btn.clicked.connect(self._refresh_list)
-        btn_row.addWidget(self._refresh_btn)
+        bottom_layout.addWidget(self._refresh_btn)
 
-        btn_row.addStretch(1)
+        bottom_layout.addStretch(1)
 
         self._close_btn = QPushButton("Close")
         self._close_btn.clicked.connect(self._on_close)
-        btn_row.addWidget(self._close_btn)
+        bottom_layout.addWidget(self._close_btn)
 
-        layout.addLayout(btn_row)
+        layout.addWidget(bottom_bar)
 
     # ── List management ──
 

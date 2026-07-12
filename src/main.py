@@ -14,14 +14,12 @@ import os
 # Ensure the src directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QTabWidget, QLabel, QStatusBar,
-    QVBoxLayout, QWidget, QSizePolicy,
+    QApplication, QMainWindow, QTabWidget, QStatusBar,
+    QVBoxLayout, QWidget,
 )
-from PySide6.QtGui import QIcon
 
-from theme import apply_theme, C_BG, C_SURFACE, C_BORDER, C_TEXT, C_TEXT_BRIGHT, C_ACCENT
+from theme import apply_theme
 from plugin_manager_tab import PluginManagerTab
 from patcher_tab import PatcherTab
 
@@ -48,53 +46,17 @@ class MainWindow(QMainWindow):
         self._tabs.setDocumentMode(True)
         self._tabs.setMovable(False)
 
-        # Apply tab bar styling programmatically (in addition to QSS)
-        self._tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                background-color: {C_BG};
-                border: none;
-                border-top: 1px solid {C_BORDER};
-            }}
-            QTabBar::tab {{
-                background-color: {C_SURFACE};
-                color: {C_TEXT};
-                padding: 7px 22px;
-                border: none;
-                border-bottom: 1px solid {C_BORDER};
-                min-width: 140px;
-                font-size: 13px;
-            }}
-            QTabBar::tab:hover {{
-                background-color: {C_SURFACE};
-                border-bottom: 1px solid {C_ACCENT};
-            }}
-            QTabBar::tab:selected {{
-                background-color: {C_BG};
-                color: {C_TEXT_BRIGHT};
-                border-bottom: 2px solid {C_ACCENT};
-                font-weight: 600;
-            }}
-        """)
-
         # Create tabs
         self._plugin_tab = PluginManagerTab()
         self._patcher_tab = PatcherTab()
 
-        self._tabs.addTab(self._plugin_tab, "Plugin Manager")
-        self._tabs.addTab(self._patcher_tab, "Patcher")
+        self._tabs.addTab(self._plugin_tab, "  Plugin Manager  ")
+        self._tabs.addTab(self._patcher_tab, "  Patcher  ")
 
         layout.addWidget(self._tabs, 1)
 
         # Status bar
         self._status_bar = QStatusBar()
-        self._status_bar.setStyleSheet(f"""
-            QStatusBar {{
-                background-color: {C_SURFACE};
-                color: {C_TEXT};
-                border-top: 1px solid {C_BORDER};
-                padding: 2px 8px;
-            }}
-        """)
         self._status_bar.showMessage("Ready")
         self.setStatusBar(self._status_bar)
 
@@ -102,18 +64,18 @@ class MainWindow(QMainWindow):
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
     def _on_tab_changed(self, index: int):
-        text = self._tabs.tabText(index)
+        text = self._tabs.tabText(index).strip()
         self._status_bar.showMessage(f"Tab: {text}")
 
 
 def main():
     app = QApplication(sys.argv)
 
-    # Apply UE5 dark theme
+    # Apply UE5 Editor dark theme
     apply_theme(app)
 
-    # Also set app-level palette overrides for widget types that QSS can't fully style
-    app.setStyle("Fusion")  # Fusion is the most QSS-compatible style
+    # Fusion is the most QSS-compatible style
+    app.setStyle("Fusion")
 
     window = MainWindow()
     window.show()

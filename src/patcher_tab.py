@@ -7,19 +7,55 @@ from typing import List, Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QLineEdit, QLabel, QProgressBar, QPlainTextEdit,
+    QLabel, QProgressBar, QPlainTextEdit,
     QFileDialog, QMessageBox, QFrame, QSizePolicy,
 )
 
 from models import EngineInfo
 from registry_helper import discover_ue_installations
 from theme import (
-    C_ACCENT_ORANGE, C_ACCENT, C_ACCENT_GREEN,
+    C_ACCENT, C_ACCENT_GREEN,
     C_TEXT_DIM, C_TEXT_BRIGHT, C_ACCENT_RED,
+    C_CARD, C_CARD_BORDER,
 )
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
 from patcher.version_dialog import VersionManagerDialog
+
+
+def _make_section_card(title: str) -> tuple:
+    """Create a styled section card with header.
+
+    Returns (card_frame, inner_layout) for adding widgets to.
+    """
+    card = QFrame()
+    card.setObjectName("sectionCard")
+    card.setStyleSheet(f"""
+        QFrame#sectionCard {{
+            background-color: {C_CARD};
+            border: 1px solid {C_CARD_BORDER};
+            border-radius: 6px;
+        }}
+    """)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(12, 8, 12, 10)
+    card_layout.setSpacing(6)
+
+    # Header label
+    header = QLabel(title)
+    header.setStyleSheet(f"""
+        font-size: 11px;
+        font-weight: 700;
+        color: {C_TEXT_DIM};
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0;
+        background: transparent;
+    """)
+    card_layout.addWidget(header)
+
+    return card, card_layout
 
 
 class PatcherTab(QWidget):
@@ -27,7 +63,7 @@ class PatcherTab(QWidget):
 
     _patch_finished = Signal(object, str)
 
-    # Hidden style for the combo box (like plugin manager) — no dropdown arrow
+    # Hidden style for the combo box (no dropdown arrow)
     _COMBO_QSS = (
         "QComboBox { padding-right: 0px; }"
         "QComboBox::drop-down { "
@@ -59,12 +95,15 @@ class PatcherTab(QWidget):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(10)
 
-        # ── Section 1: UE Folder Selector (combined combo + Browse) ──
-        layout.addWidget(self._make_section_label("Unreal Engine Installation"))
+        # ════════════════════════════════════════════
+        # CARD 1: Installation
+        # ════════════════════════════════════════════
+        card1, c1 = _make_section_card("Installation")
 
         folder_row = QHBoxLayout()
+        folder_row.setSpacing(6)
         self._ue_folder_combo = QComboBox()
         self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._ue_folder_combo.setStyleSheet(self._COMBO_QSS)
@@ -75,113 +114,119 @@ class PatcherTab(QWidget):
         self._browse_btn.clicked.connect(self._on_browse)
         folder_row.addWidget(self._browse_btn)
 
-        layout.addLayout(folder_row)
+        c1.addLayout(folder_row)
+        layout.addWidget(card1)
 
-        # ── Section 2: Patch selector + applied indicator ──
+        # ════════════════════════════════════════════
+        # CARD 2: Patch
+        # ════════════════════════════════════════════
+        card2, c2 = _make_section_card("Patch")
+
+        # Patch selector row
         patch_row = QHBoxLayout()
+        patch_row.setSpacing(6)
 
         patch_label = QLabel("Patch:")
+        patch_label.setStyleSheet("background: transparent;")
         patch_row.addWidget(patch_label)
 
         self._version_picker = QComboBox()
         self._version_picker.setMinimumWidth(200)
+        self._version_picker.setStyleSheet(self._COMBO_QSS)
         self._version_picker.currentIndexChanged.connect(self._on_version_selected)
         patch_row.addWidget(self._version_picker, 1)
 
         self._version_count_label = QLabel("")
-        self._version_count_label.setAlignment(Qt.AlignRight)
+        self._version_count_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._version_count_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; background: transparent;")
         patch_row.addWidget(self._version_count_label)
 
-        layout.addLayout(patch_row)
+        c2.addLayout(patch_row)
 
         # Applied version indicator
         self._applied_version_label = QLabel("")
         self._applied_version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        layout.addWidget(self._applied_version_label)
+        self._applied_version_label.setStyleSheet("background: transparent; font-size: 12px;")
+        c2.addWidget(self._applied_version_label)
 
-        # ── Section 3: Changelog ──
-        layout.addWidget(self._make_section_label("Changelog"))
+        layout.addWidget(card2)
+
+        # ════════════════════════════════════════════
+        # CARD 3: Changelog
+        # ════════════════════════════════════════════
+        card3, c3 = _make_section_card("Changelog")
+        c3.setContentsMargins(12, 4, 12, 10)
+        c3.setSpacing(4)
 
         self._changelog = QPlainTextEdit()
         self._changelog.setReadOnly(True)
-        self._changelog.setPlaceholderText("Select a version to view its changelog...")
-        self._changelog.setMinimumHeight(120)
-        layout.addWidget(self._changelog, 1)
+        self._changelog.setPlaceholderText("Select a version to view its changelog\u2026")
+        self._changelog.setMinimumHeight(100)
+        c3.addWidget(self._changelog, 1)
 
-        # ── Section 4: Action buttons ──
-        layout.addWidget(self._make_section_label("Actions"))
+        layout.addWidget(card3, 1)
 
-        # Operation overlay (progress + label)
+        # ════════════════════════════════════════════
+        # CARD 4: Actions
+        # ════════════════════════════════════════════
+        card4, c4 = _make_section_card("Actions")
+
+        # Operation overlay (hidden until active)
         op_row = QHBoxLayout()
         self._operation_label = QLabel("")
         self._operation_label.setVisible(False)
+        self._operation_label.setStyleSheet("background: transparent;")
         op_row.addWidget(self._operation_label)
 
         self._operation_progress = QProgressBar()
         self._operation_progress.setVisible(False)
         self._operation_progress.setMaximum(0)  # Indeterminate
-        self._operation_progress.setFixedHeight(8)
+        self._operation_progress.setFixedHeight(6)
         self._operation_progress.setTextVisible(False)
         op_row.addWidget(self._operation_progress, 1)
-        layout.addLayout(op_row)
+        c4.addLayout(op_row)
 
+        # Action buttons row
         action_row = QHBoxLayout()
+        action_row.setSpacing(6)
 
-        self._apply_custom_btn = QPushButton("  Apply Custom Engine")
+        self._apply_custom_btn = QPushButton("Apply Custom Engine")
+        self._apply_custom_btn.setProperty("class", "primary")
         self._apply_custom_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._apply_custom_btn.setMinimumWidth(180)
         self._apply_custom_btn.clicked.connect(lambda: self._on_apply(True))
         action_row.addWidget(self._apply_custom_btn)
 
-        self._apply_default_btn = QPushButton("  Revert to Default")
+        self._apply_default_btn = QPushButton("Revert to Default")
         self._apply_default_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self._apply_default_btn.setMinimumWidth(160)
         self._apply_default_btn.clicked.connect(lambda: self._on_apply(False))
         action_row.addWidget(self._apply_default_btn)
 
-        action_row.addWidget(self._make_vsep())
+        action_row.addSpacing(10)
 
         self._manage_btn = QPushButton("Manage")
+        self._manage_btn.setObjectName("toolBtn")
         self._manage_btn.clicked.connect(self._on_manage_versions)
         action_row.addWidget(self._manage_btn)
 
         action_row.addStretch(1)
 
-        layout.addLayout(action_row)
+        c4.addLayout(action_row)
 
-        # ── Section 5: Status ──
-        layout.addWidget(self._make_section_label("Status"))
+        layout.addWidget(card4)
 
-        self._status_label = QLabel("")
+        # ════════════════════════════════════════════
+        # Status bar (below cards, no card wrapper)
+        # ════════════════════════════════════════════
+        self._status_label = QLabel("Ready.")
         self._status_label.setWordWrap(True)
-        self._status_label.setMinimumHeight(36)
+        self._status_label.setMinimumHeight(24)
+        self._status_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; padding: 2px 4px; background: transparent;")
         layout.addWidget(self._status_label)
 
         # Initial state
         self._update_apply_buttons()
-        self._status_label.setStyleSheet(f"color: {C_TEXT_DIM};")
-        self._status_label.setText("Ready.")
-
-    # ── Helpers ──
-
-    @staticmethod
-    def _make_section_label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet(f"""
-            font-size: 12px;
-            font-weight: 600;
-            color: {C_TEXT_BRIGHT};
-            padding: 4px 0 2px 0;
-        """)
-        return label
-
-    @staticmethod
-    def _make_vsep() -> QFrame:
-        sep = QFrame()
-        sep.setFrameShape(QFrame.VLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        sep.setStyleSheet(f"color: {C_TEXT_DIM};")
-        return sep
 
     # ── UE Path Discovery ──
 
@@ -234,7 +279,7 @@ class PatcherTab(QWidget):
         """Called when the user selects/browses a new UE directory."""
         ue_dir = self._current_ue_root
         if not ue_dir or not os.path.isdir(ue_dir):
-            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM};")
+            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM}; background: transparent;")
             self._applied_version_label.setText("")
             self._update_apply_buttons()
             return
@@ -242,10 +287,14 @@ class PatcherTab(QWidget):
         # Detect what version is currently applied
         applied = FilePatcher.detect_applied_version(ue_dir, self._versions)
         if applied:
-            self._applied_version_label.setStyleSheet(f"color: {C_ACCENT_GREEN}; font-weight: 600;")
+            self._applied_version_label.setStyleSheet(
+                f"color: {C_ACCENT_GREEN}; font-weight: 600; background: transparent;"
+            )
             self._applied_version_label.setText(f"\u2714 Applied: {applied}")
         else:
-            self._applied_version_label.setStyleSheet(f"color: {C_TEXT_DIM};")
+            self._applied_version_label.setStyleSheet(
+                f"color: {C_TEXT_DIM}; background: transparent;"
+            )
             self._applied_version_label.setText("No version applied")
 
         self._update_apply_buttons()
@@ -264,7 +313,7 @@ class PatcherTab(QWidget):
                     self._version_picker.addItem(f"{v.engine_version}  (UE {v.unreal_version})")
                 self._version_picker.setCurrentIndex(len(self._versions) - 1)
                 self._on_version_selected(len(self._versions) - 1)
-                self._version_count_label.setText(f"{len(self._versions)} patch(es) available")
+                self._version_count_label.setText(f"{len(self._versions)} patch(es)")
             else:
                 self._version_count_label.setText("No patches found")
                 self._changelog.setPlainText(
@@ -277,7 +326,7 @@ class PatcherTab(QWidget):
             self._on_ue_dir_changed()
 
         except Exception as e:
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
+            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText(f"Error discovering versions: {e}")
 
         self._version_picker.blockSignals(False)
@@ -318,7 +367,7 @@ class PatcherTab(QWidget):
     def _on_apply(self, custom_engine: bool):
         idx = self._version_picker.currentIndex()
         if idx < 0 or idx >= len(self._versions):
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
+            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText("No version selected.")
             return
 
@@ -326,7 +375,7 @@ class PatcherTab(QWidget):
         ue_dir = self._current_ue_root
 
         if not ue_dir or not os.path.isdir(ue_dir):
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
+            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText("Invalid UE directory. Please select a valid Unreal Engine installation.")
             return
 
@@ -358,7 +407,7 @@ class PatcherTab(QWidget):
         self._is_working = True
         self._set_buttons_enabled(False)
 
-        self._operation_label.setText("Applying custom engine..." if custom_engine else "Reverting to default...")
+        self._operation_label.setText("Applying custom engine\u2026" if custom_engine else "Reverting to default\u2026")
         self._operation_label.setVisible(True)
         self._operation_progress.setVisible(True)
 
@@ -389,11 +438,11 @@ class PatcherTab(QWidget):
         self._set_buttons_enabled(True)
 
         if result.success:
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_GREEN};")
+            self._status_label.setStyleSheet(f"color: {C_ACCENT_GREEN}; font-size: 12px;")
             self._status_label.setText(f"Success: {result.message}")
             self._on_ue_dir_changed()  # Refresh applied indicator (reads marker)
         else:
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
+            self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText(f"Failed: {result.message}")
 
     def _on_manage_versions(self):

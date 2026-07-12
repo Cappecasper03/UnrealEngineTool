@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from models import PluginData
 from registry_helper import discover_ue_installations
-from theme import C_ACCENT_ORANGE, C_ACCENT, C_ACCENT_GREEN, C_TEXT_DIM, C_TEXT_BRIGHT, C_BORDER, C_PANEL
+from theme import C_ACCENT_ORANGE, C_TEXT_DIM, C_TEXT_BRIGHT, C_CARD, C_CARD_BORDER
 from plugin_manager.scanner import UPluginScanner
 from plugin_manager.patcher import UPluginPatcher
 from plugin_manager.backup_manager import BackupManager
@@ -59,6 +59,44 @@ class SortableTreeItem(QTreeWidgetItem):
         return self.text(col).lower() < other.text(col).lower()
 
 
+# ── Helpers ──
+
+def _make_section_card(title: str) -> tuple:
+    """Create a styled section card with header.
+
+    Returns (card_frame, inner_layout) for adding widgets to.
+    The card_frame is a QFrame with class='card' styling.
+    """
+    card = QFrame()
+    card.setObjectName("sectionCard")
+    card.setStyleSheet(f"""
+        QFrame#sectionCard {{
+            background-color: {C_CARD};
+            border: 1px solid {C_CARD_BORDER};
+            border-radius: 6px;
+        }}
+    """)
+
+    card_layout = QVBoxLayout(card)
+    card_layout.setContentsMargins(12, 8, 12, 10)
+    card_layout.setSpacing(6)
+
+    # Header label
+    header = QLabel(title)
+    header.setStyleSheet(f"""
+        font-size: 11px;
+        font-weight: 700;
+        color: {C_TEXT_DIM};
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0;
+        background: transparent;
+    """)
+    card_layout.addWidget(header)
+
+    return card, card_layout
+
+
 class PluginManagerTab(QWidget):
     """Plugin Manager tab with tree, search, filter, and actions."""
 
@@ -67,6 +105,17 @@ class PluginManagerTab(QWidget):
     COL_NAME = 1
     COL_CATEGORY = 2
     COL_DESCRIPTION = 3
+
+    # Hidden style for combo (no dropdown arrow — selection via Browse)
+    _COMBO_QSS = (
+        "QComboBox { padding-right: 0px; }"
+        "QComboBox::drop-down { "
+        "  subcontrol-origin: padding;"
+        "  subcontrol-position: top right;"
+        "  width: 0px; border: none; background: transparent;"
+        "}"
+        "QComboBox::down-arrow { image: none; border: none; }"
+    )
 
     def __init__(self):
         super().__init__()
@@ -85,26 +134,22 @@ class PluginManagerTab(QWidget):
         self._discover_paths()
 
     def _build_ui(self):
+        """Build the full tab layout with card-based sections."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(10)
 
-        # ── Section 1: UE Folder Selector ──
-        layout.addWidget(self._make_section_label("Unreal Engine Installation"))
+        # ════════════════════════════════════════════
+        # CARD 1: Unreal Engine Installation
+        # ════════════════════════════════════════════
+        card1, c1 = _make_section_card("Installation")
 
         folder_row = QHBoxLayout()
+        folder_row.setSpacing(6)
+
         self._ue_folder_combo = QComboBox()
         self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        # Hide the dropdown arrow — selection happens via Browse button
-        self._ue_folder_combo.setStyleSheet(
-            "QComboBox { padding-right: 0px; }"
-            "QComboBox::drop-down { "
-            "  subcontrol-origin: padding;"
-            "  subcontrol-position: top right;"
-            "  width: 0px; border: none; background: transparent;"
-            "}"
-            "QComboBox::down-arrow { image: none; border: none; }"
-        )
+        self._ue_folder_combo.setStyleSheet(self._COMBO_QSS)
         self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
         folder_row.addWidget(self._ue_folder_combo)
 
@@ -112,83 +157,113 @@ class PluginManagerTab(QWidget):
         self._browse_btn.clicked.connect(self._on_browse)
         folder_row.addWidget(self._browse_btn)
 
-        layout.addLayout(folder_row)
+        c1.addLayout(folder_row)
 
-        # Scanning overlay
+        # Scanning progress (hidden until active)
         scan_row = QHBoxLayout()
-        self._scanning_label = QLabel("Scanning plugins...")
+        self._scanning_label = QLabel("Scanning plugins\u2026")
         self._scanning_label.setVisible(False)
+        self._scanning_label.setStyleSheet(f"color: {C_TEXT_DIM}; background: transparent;")
         scan_row.addWidget(self._scanning_label)
 
         self._scan_progress = QProgressBar()
         self._scan_progress.setVisible(False)
         self._scan_progress.setMaximum(0)  # Indeterminate
         self._scan_progress.setTextVisible(False)
-        self._scan_progress.setFixedHeight(8)
+        self._scan_progress.setFixedHeight(6)
         scan_row.addWidget(self._scan_progress, 1)
-        layout.addLayout(scan_row)
+        c1.addLayout(scan_row)
 
-        # ── Section 2: Toolbar ──
-        toolbar1 = QHBoxLayout()
+        layout.addWidget(card1)
+
+        # ════════════════════════════════════════════
+        # CARD 2: Tools & Actions
+        # ════════════════════════════════════════════
+        card2, c2 = _make_section_card("Actions")
+
+        # Toolbar row 1: bulk operations
+        tool_row1 = QHBoxLayout()
+        tool_row1.setSpacing(4)
 
         self._select_all_btn = QPushButton("Select All")
+        self._select_all_btn.setObjectName("toolBtn")
         self._select_all_btn.clicked.connect(lambda: self._bulk_toggle(True))
-        toolbar1.addWidget(self._select_all_btn)
+        tool_row1.addWidget(self._select_all_btn)
 
         self._deselect_all_btn = QPushButton("Deselect All")
+        self._deselect_all_btn.setObjectName("toolBtn")
         self._deselect_all_btn.clicked.connect(lambda: self._bulk_toggle(False))
-        toolbar1.addWidget(self._deselect_all_btn)
+        tool_row1.addWidget(self._deselect_all_btn)
 
-        toolbar1.addWidget(self._make_vsep())
+        tool_row1.addSpacing(8)
 
+        # Backup section
         self._save_backup_btn = QPushButton("Save Backup")
+        self._save_backup_btn.setObjectName("toolBtn")
         self._save_backup_btn.clicked.connect(self._on_save_backup)
-        toolbar1.addWidget(self._save_backup_btn)
+        tool_row1.addWidget(self._save_backup_btn)
 
         self._load_backup_btn = QPushButton("Load Backup")
+        self._load_backup_btn.setObjectName("toolBtn")
         self._load_backup_btn.clicked.connect(self._on_load_backup)
-        toolbar1.addWidget(self._load_backup_btn)
+        tool_row1.addWidget(self._load_backup_btn)
 
-        toolbar1.addWidget(self._make_vsep())
+        tool_row1.addSpacing(8)
 
+        # Template section
         self._save_template_btn = QPushButton("Save Template")
+        self._save_template_btn.setObjectName("toolBtn")
         self._save_template_btn.clicked.connect(self._on_save_template)
-        toolbar1.addWidget(self._save_template_btn)
+        tool_row1.addWidget(self._save_template_btn)
 
         self._load_template_btn = QPushButton("Load Template")
+        self._load_template_btn.setObjectName("toolBtn")
         self._load_template_btn.clicked.connect(self._on_load_template)
-        toolbar1.addWidget(self._load_template_btn)
+        tool_row1.addWidget(self._load_template_btn)
 
-        toolbar1.addStretch(1)
+        tool_row1.addStretch(1)
 
+        # Right-aligned: Revert + Apply
         self._revert_btn = QPushButton("Revert Changes")
+        self._revert_btn.setObjectName("toolBtn")
         self._revert_btn.setEnabled(False)
         self._revert_btn.clicked.connect(self._on_revert_changes)
-        toolbar1.addWidget(self._revert_btn)
+        tool_row1.addWidget(self._revert_btn)
 
         self._apply_btn = QPushButton("Apply Changes")
+        self._apply_btn.setProperty("class", "primary")
         self._apply_btn.setEnabled(False)
         self._apply_btn.setFixedWidth(140)
         self._apply_btn.clicked.connect(self._on_apply_changes)
-        toolbar1.addWidget(self._apply_btn)
+        tool_row1.addWidget(self._apply_btn)
 
-        layout.addLayout(toolbar1)
+        c2.addLayout(tool_row1)
 
         # Toolbar row 2: search
-        toolbar2 = QHBoxLayout()
+        search_row = QHBoxLayout()
+        search_row.setSpacing(4)
 
         self._search_box = QLineEdit()
-        self._search_box.setPlaceholderText("Search by name, friendly name, or description...")
+        self._search_box.setPlaceholderText("Search plugins by name, friendly name, or description\u2026")
         self._search_box.textChanged.connect(self._on_search_changed)
-        toolbar2.addWidget(self._search_box, 1)
+        search_row.addWidget(self._search_box, 1)
 
         self._clear_search_btn = QPushButton("Clear")
+        self._clear_search_btn.setObjectName("toolBtn")
         self._clear_search_btn.clicked.connect(self._on_clear_search)
-        toolbar2.addWidget(self._clear_search_btn)
+        search_row.addWidget(self._clear_search_btn)
 
-        layout.addLayout(toolbar2)
+        c2.addLayout(search_row)
 
-        # ── Section 3: Plugin Tree ──
+        layout.addWidget(card2)
+
+        # ════════════════════════════════════════════
+        # CARD 3: Plugin List
+        # ════════════════════════════════════════════
+        card3, c3 = _make_section_card("Plugins")
+        c3.setContentsMargins(0, 4, 0, 0)
+        c3.setSpacing(0)
+
         self._tree = QTreeWidget()
         self._tree.setColumnCount(4)
         self._tree.setHeaderLabels(["Enabled", "Name", "Category", "Description"])
@@ -207,42 +282,24 @@ class PluginManagerTab(QWidget):
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
         header.resizeSection(self.COL_NAME, 220)
         header.resizeSection(self.COL_CATEGORY, 150)
-        # User can drag column borders to resize; horizontal scrollbar appears when content exceeds width
 
-        layout.addWidget(self._tree, 1)
+        c3.addWidget(self._tree, 1)
 
-        # ── Section 4: Status bar ──
-        status_row = QHBoxLayout()
+        layout.addWidget(card3, 1)
+
+        # ════════════════════════════════════════════
+        # Stats bar (below the cards, no card wrapper)
+        # ════════════════════════════════════════════
         self._stats_label = QLabel("")
         self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        status_row.addWidget(self._stats_label)
-
-        layout.addLayout(status_row)
+        self._stats_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; padding: 2px 4px; background: transparent;")
+        layout.addWidget(self._stats_label)
 
         # Initial state
         self._set_action_buttons_enabled(False)
         self._update_stats()
 
     # ── Helpers ──
-
-    @staticmethod
-    def _make_section_label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet(f"""
-            font-size: 12px;
-            font-weight: 600;
-            color: {C_TEXT_BRIGHT};
-            padding: 4px 0 2px 0;
-        """)
-        return label
-
-    @staticmethod
-    def _make_vsep() -> QFrame:
-        sep = QFrame()
-        sep.setFrameShape(QFrame.VLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        sep.setStyleSheet(f"color: {C_TEXT_DIM};")
-        return sep
 
     def _update_stats(self):
         total = len(self._plugins)
@@ -255,9 +312,9 @@ class PluginManagerTab(QWidget):
             return
 
         filter_info = f" (showing {filtered})" if filtered != total else ""
-        stats_text = f"{enabled} enabled  \u00b7  {total} total{filter_info}"
+        stats_text = f"\u2022  {enabled} enabled  \u00b7  {total} total{filter_info}"
         if modified > 0:
-            stats_text += f"  ·  <span style='color: {C_ACCENT_ORANGE}; font-weight: 600;'>{modified} modified</span>"
+            stats_text += f"  \u00b7  <span style='color: {C_ACCENT_ORANGE}; font-weight: 600;'>{modified} modified</span>"
         self._stats_label.setText(stats_text)
 
     def _count_filtered(self) -> int:
@@ -316,9 +373,6 @@ class PluginManagerTab(QWidget):
         if not path:
             return
 
-        # Validate
-        test_file = os.path.join(path, "Engine", "Binaries", "Win64", "UnrealEditor-Engine.dll")
-
         # Check if already in combo (match on stored path)
         norm_path = os.path.normpath(path).lower()
         for i in range(self._ue_folder_combo.count()):
@@ -336,14 +390,14 @@ class PluginManagerTab(QWidget):
     def _start_scan(self):
         self._is_scanning = True
         self._set_action_buttons_enabled(False)
-        self._scanning_label.setText(f"Scanning {self._current_ue_root}...")
+        self._scanning_label.setText(f"Scanning {self._current_ue_root}\u2026")
         self._scanning_label.setVisible(True)
         self._scan_progress.setVisible(True)
         self._plugins.clear()
         self._tree.clear()
 
         # Background scan
-        self._scanning_label.setText(f"Scanning {self._current_ue_root}...")
+        self._scanning_label.setText(f"Scanning {self._current_ue_root}\u2026")
         self._scan_progress.setMaximum(0)  # Indeterminate
 
         self._thread = QThread()
@@ -498,12 +552,14 @@ class PluginManagerTab(QWidget):
         for p in self._plugins:
             p.snapshot_original()
         self._original_plugins = [
-            PluginData(name=p.name, friendly_name=p.friendly_name,
-                       description=p.description, category=p.category,
-                       version_name=p.version_name,
-                       enabled_by_default=p.enabled_by_default,
-                       installed=p.installed, relative_path=p.relative_path,
-                       full_path=p.full_path, icon_path=p.icon_path)
+            PluginData(
+                name=p.name, friendly_name=p.friendly_name,
+                description=p.description, category=p.category,
+                version_name=p.version_name,
+                enabled_by_default=p.enabled_by_default,
+                installed=p.installed, relative_path=p.relative_path,
+                full_path=p.full_path, icon_path=p.icon_path,
+            )
             for p in self._plugins
         ]
         self._update_stats()

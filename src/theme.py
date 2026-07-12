@@ -1,44 +1,55 @@
-"""UE5-inspired dark theme QSS stylesheet for the Unreal Engine Tool.
+"""UE5 Editor-inspired dark theme QSS stylesheet.
 
-Everything is driven by a single QSS string applied to the QApplication.
+Color palette and visual language mirroring Unreal Engine 5's editor:
+  - Deep charcoal backgrounds (#1a1a1a)
+  - Subtle layered surfaces (#252525 → #2d2d2d → #333333)
+  - Bright blue accent (#1998FF) for selection highlights, borders on focus
+  - Clean flat buttons with hover/pressed states
+  - Card-style panel containers with subtle border differentiation
 """
 
-# ── Color Palette (mapped from the Godot C# theme) ──
-# Using named colors so we could programmatically adjust them later
-C_BG = "#1A1A1A"
+# ── Color Palette ──
+C_BG = "#1a1a1a"
 C_SURFACE = "#252525"
-C_SURFACE2 = "#2D2D2D"
-C_PANEL = "#333333"
-C_PANEL_LIGHT = "#383838"
+C_SURFACE2 = "#2d2d2d"
+C_PANEL = "#323232"
+C_PANEL_LIGHT = "#3a3a3a"
+C_CARD = "#282828"
+C_CARD_BORDER = "#3c3c3c"
 C_ACCENT = "#1998FF"
+C_ACCENT_HOVER = "#3aabff"
 C_ACCENT_ORANGE = "#FF6B35"
 C_ACCENT_GREEN = "#4CAF50"
 C_ACCENT_RED = "#F44336"
-C_TEXT = "#CCCCCC"
-C_TEXT_BRIGHT = "#F0F0F0"
+C_TEXT = "#cccccc"
+C_TEXT_BRIGHT = "#f0f0f0"
 C_TEXT_DIM = "#808080"
 C_BORDER = "#474747"
+C_BORDER_SUBTLE = "#333333"
+C_TOGGLE_BG = "#505050"
 
-# ── Icons (embedded SVG for custom checkbox/radio) ──
-# We use Unicode characters where possible, SVG for check/radio states
+_Q = '"'  # QSS needs careful quoting — avoid nested f-string conflicts
 
 # ── QSS Stylesheet ──
 
 QSS = f"""
+/* ═══════════════════════════════════════════════
+   UE5 EDITOR DARK THEME
+   ═══════════════════════════════════════════════ */
+
 /* ===== GLOBAL ===== */
 QWidget {{
     background-color: {C_BG};
     color: {C_TEXT};
-    font-family: "Segoe UI", "SF Pro Text", "Roboto", sans-serif;
+    font-family: "Segoe UI", "Roboto", "SF Pro Text", sans-serif;
     font-size: 13px;
 }}
 
-/* ===== WINDOW ===== */
 QMainWindow {{
     background-color: {C_BG};
 }}
 
-/* ===== TAB WIDGET ===== */
+/* ===== TAB WIDGET (main window) ===== */
 QTabWidget::pane {{
     background-color: {C_BG};
     border: none;
@@ -48,22 +59,42 @@ QTabWidget::pane {{
 QTabBar::tab {{
     background-color: {C_SURFACE};
     color: {C_TEXT};
-    padding: 6px 18px;
+    padding: 8px 24px;
     border: none;
     border-bottom: 1px solid {C_BORDER};
-    min-width: 120px;
+    min-width: 140px;
+    font-size: 13px;
 }}
 
 QTabBar::tab:hover {{
     background-color: {C_SURFACE2};
-    border-bottom: 1px solid {C_ACCENT_ORANGE};
+    border-bottom: 1px solid {C_TEXT_DIM};
 }}
 
 QTabBar::tab:selected {{
     background-color: {C_BG};
     color: {C_TEXT_BRIGHT};
     border-bottom: 2px solid {C_ACCENT};
+    font-weight: 600;
 }}
+
+/* ===== LABEL ===== */
+QLabel {{
+    color: {C_TEXT};
+    background: transparent;
+}}
+
+/* ===== CARD / PANEL ===== */
+/* Use on QFrame with class="card" via setProperty("class","card") */
+QFrame[class="card"] {{
+    background-color: {C_CARD};
+    border: 1px solid {C_CARD_BORDER};
+    border-radius: 6px;
+    padding: 12px;
+}}
+
+/* ===== SECTION LABEL (used programmatically via setStyleSheet) ===== */
+/* Inline style in code — not duplicated here as a generic rule */
 
 /* ===== BUTTONS ===== */
 QPushButton {{
@@ -71,8 +102,9 @@ QPushButton {{
     color: {C_TEXT_BRIGHT};
     border: 1px solid {C_BORDER};
     border-radius: 4px;
-    padding: 5px 14px;
-    min-height: 22px;
+    padding: 5px 16px;
+    min-height: 24px;
+    font-size: 13px;
 }}
 
 QPushButton:hover {{
@@ -88,13 +120,52 @@ QPushButton:pressed {{
 QPushButton:disabled {{
     background-color: {C_SURFACE};
     color: {C_TEXT_DIM};
-    border-color: #333333;
+    border-color: {C_BORDER_SUBTLE};
 }}
 
 QPushButton:checked {{
     background-color: {C_ACCENT};
     border-color: {C_ACCENT};
     color: {C_TEXT_BRIGHT};
+}}
+
+/* Primary action buttons (Apply, Save) */
+QPushButton[class="primary"] {{
+    background-color: {C_ACCENT};
+    border-color: {C_ACCENT};
+    color: {C_TEXT_BRIGHT};
+    font-weight: 600;
+}}
+
+QPushButton[class="primary"]:hover {{
+    background-color: {C_ACCENT_HOVER};
+    border-color: {C_ACCENT_HOVER};
+}}
+
+QPushButton[class="primary"]:disabled {{
+    background-color: {C_SURFACE};
+    color: {C_TEXT_DIM};
+    border-color: {C_BORDER_SUBTLE};
+}}
+
+/* Danger buttons (Delete, Remove) */
+QPushButton[class="danger"] {{
+    color: {C_ACCENT_RED};
+}}
+
+QPushButton[class="danger"]:hover {{
+    background-color: #3d2222;
+    border-color: {C_ACCENT_RED};
+}}
+
+QPushButton[class="danger"]:disabled {{
+    color: {C_TEXT_DIM};
+}}
+
+/* Toolbar button — compact */
+QPushButton[class="toolbar"] {{
+    padding: 4px 12px;
+    min-height: 22px;
 }}
 
 /* ===== COMBO BOX ===== */
@@ -108,6 +179,10 @@ QComboBox {{
 }}
 
 QComboBox:hover {{
+    border-color: {C_ACCENT};
+}}
+
+QComboBox:focus {{
     border-color: {C_ACCENT};
 }}
 
@@ -147,17 +222,18 @@ QLineEdit:focus {{
     border-color: {C_ACCENT};
 }}
 
-QLineEdit::placeholder {{
+QLineEdit:disabled {{
+    background-color: {C_SURFACE};
     color: {C_TEXT_DIM};
 }}
 
-/* ===== TEXT EDIT / PLAIN TEXT EDIT ===== */
+/* ===== PLAIN TEXT EDIT ===== */
 QPlainTextEdit {{
     background-color: {C_SURFACE2};
     color: {C_TEXT_BRIGHT};
     border: 1px solid {C_BORDER};
     border-radius: 4px;
-    padding: 4px;
+    padding: 6px 8px;
 }}
 
 QPlainTextEdit:focus {{
@@ -165,7 +241,7 @@ QPlainTextEdit:focus {{
 }}
 
 /* ===== TREE / TABLE / LIST VIEWS ===== */
-QTreeView, QTableView, QListView {{
+QTreeView, QTableView, QListView, QTableWidget {{
     background-color: {C_SURFACE2};
     color: {C_TEXT};
     border: 1px solid {C_BORDER};
@@ -176,64 +252,87 @@ QTreeView, QTableView, QListView {{
     outline: none;
 }}
 
-QTreeView::item, QTableView::item, QListView::item {{
-    padding: 3px 6px;
-    border-bottom: 1px solid #2A2A2A;
+QTreeView::item, QTableView::item, QTableWidget::item {{
+    padding: 4px 8px;
+    border-bottom: 1px solid #2a2a2a;
+    min-height: 24px;
 }}
 
 QTreeView::item:hover, QTableView::item:hover {{
-    background-color: #3A3A3A;
+    background-color: {C_PANEL_LIGHT};
 }}
 
 QTreeView::item:selected, QTableView::item:selected {{
     background-color: {C_ACCENT}26;
 }}
 
-/* Header */
+/* Table header */
 QHeaderView::section {{
     background-color: {C_SURFACE};
     color: {C_TEXT};
-    padding: 5px 8px;
+    padding: 5px 10px;
     border: none;
     border-bottom: 1px solid {C_BORDER};
-    border-right: 1px solid {C_BORDER};
+    border-right: 1px solid {C_BORDER_SUBTLE};
     font-weight: 600;
+    font-size: 12px;
 }}
 
 QHeaderView::section:hover {{
     background-color: {C_SURFACE2};
 }}
 
+/* List widget items (used in the version dialog list) */
+QListWidget {{
+    border: 1px solid {C_BORDER};
+    border-radius: 4px;
+}}
+
+QListWidget::item {{
+    padding: 5px 10px;
+    min-height: 22px;
+}}
+
+QListWidget::item:hover {{
+    background-color: {C_PANEL_LIGHT};
+}}
+
+QListWidget::item:selected {{
+    background-color: {C_ACCENT}33;
+    color: {C_TEXT_BRIGHT};
+}}
+
 /* ===== PROGRESS BAR ===== */
 QProgressBar {{
     background-color: {C_SURFACE};
-    border: none;
+    border: 1px solid {C_BORDER};
     border-radius: 3px;
     text-align: center;
     color: {C_TEXT_BRIGHT};
-    min-height: 16px;
+    min-height: 14px;
+    font-size: 11px;
 }}
 
 QProgressBar::chunk {{
     background-color: {C_ACCENT};
-    border-radius: 3px;
+    border-radius: 2px;
 }}
 
-/* ===== SCROLL BARS ===== */
+/* ===== SCROLLBARS ===== */
 QScrollBar:vertical {{
     background-color: {C_BG};
-    width: 10px;
+    width: 8px;
     margin: 0;
 }}
 
 QScrollBar::handle:vertical {{
-    background-color: {C_BORDER};
-    border-radius: 5px;
+    background-color: #555555;
+    border-radius: 4px;
     min-height: 30px;
 }}
 
 QScrollBar::handle:vertical:hover {{
-    background-color: {C_TEXT_DIM};
+    background-color: #777777;
 }}
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -242,26 +341,26 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 
 QScrollBar:horizontal {{
     background-color: {C_BG};
-    height: 10px;
+    height: 8px;
 }}
 
 QScrollBar::handle:horizontal {{
-    background-color: {C_BORDER};
-    border-radius: 5px;
+    background-color: #555555;
+    border-radius: 4px;
     min-width: 30px;
 }}
 
 QScrollBar::handle:horizontal:hover {{
-    background-color: {C_TEXT_DIM};
+    background-color: #777777;
 }}
 
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0;
 }}
 
-/* ===== CHECKBOX ===== */
+/* ===== CHECKBOX (toggle-style) ===== */
 QCheckBox {{
-    spacing: 6px;
+    spacing: 8px;
     color: {C_TEXT};
 }}
 
@@ -282,9 +381,23 @@ QCheckBox::indicator:hover {{
     border-color: {C_ACCENT};
 }}
 
-/* ===== LABEL ===== */
-QLabel {{
-    color: {C_TEXT};
+/* ===== GROUP BOX ===== */
+QGroupBox {{
+    color: {C_TEXT_BRIGHT};
+    border: 1px solid {C_BORDER};
+    border-radius: 6px;
+    margin-top: 14px;
+    padding: 16px 12px 12px 12px;
+    font-weight: 600;
+    font-size: 13px;
+}}
+
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 10px;
+    color: {C_TEXT_BRIGHT};
+    background-color: {C_BG};
 }}
 
 /* ===== SPLITTER ===== */
@@ -298,10 +411,27 @@ QToolTip {{
     color: {C_TEXT_BRIGHT};
     border: 1px solid {C_BORDER};
     border-radius: 4px;
-    padding: 4px 8px;
+    padding: 6px 10px;
+    font-size: 12px;
 }}
 
-/* ===== MENU ===== */
+/* ===== MENUBAR / MENU ===== */
+QMenuBar {{
+    background-color: {C_SURFACE};
+    color: {C_TEXT};
+    border-bottom: 1px solid {C_BORDER};
+    padding: 2px 0;
+}}
+
+QMenuBar::item {{
+    padding: 4px 12px;
+    border-radius: 3px;
+}}
+
+QMenuBar::item:selected {{
+    background-color: {C_SURFACE2};
+}}
+
 QMenu {{
     background-color: {C_SURFACE2};
     color: {C_TEXT};
@@ -323,7 +453,7 @@ QMenu::item:selected {{
 QMenu::separator {{
     height: 1px;
     background-color: {C_BORDER};
-    margin: 4px 8px;
+    margin: 4px 10px;
 }}
 
 /* ===== DIALOG ===== */
@@ -331,25 +461,42 @@ QDialog {{
     background-color: {C_BG};
 }}
 
-/* ===== GROUP BOX ===== */
-QGroupBox {{
-    color: {C_TEXT_BRIGHT};
-    border: 1px solid {C_BORDER};
-    border-radius: 4px;
-    margin-top: 12px;
-    padding-top: 16px;
-    font-weight: 600;
+/* ===== STATUS BAR ===== */
+QStatusBar {{
+    background-color: {C_SURFACE};
+    color: {C_TEXT_DIM};
+    border-top: 1px solid {C_BORDER};
+    padding: 2px 10px;
+    font-size: 12px;
 }}
 
-QGroupBox::title {{
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0 8px;
-    color: {C_TEXT_BRIGHT};
+QStatusBar::item {{
+    border: none;
+}}
+
+/* ===== FRAME (VSeparator) ===== */
+QFrame[frameShape="4"], QFrame[frameShape="5"] {{
+    color: {C_BORDER};
+    background-color: {C_BORDER};
+}}
+
+/* ===== INPUT DIALOG (QInputDialog internals) ===== */
+QInputDialog QLineEdit {{
+    margin: 4px 0;
+}}
+
+/* ===== MESSAGE BOX ===== */
+QMessageBox QPushButton {{
+    min-width: 80px;
+}}
+
+/* ===== BUTTON BOX (QDialogButtonBox) ===== */
+QDialogButtonBox QPushButton {{
+    min-width: 80px;
 }}
 """
 
 
 def apply_theme(app):
-    """Apply the UE5 dark theme to a QApplication."""
+    """Apply the UE5 Editor dark theme to a QApplication."""
     app.setStyleSheet(QSS)
