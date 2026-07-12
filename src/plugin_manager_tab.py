@@ -76,7 +76,11 @@ class PluginManagerTab(QWidget):
         folder_row = QHBoxLayout()
         self._ue_folder_combo = QComboBox()
         self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._ue_folder_combo.addItem("(select a UE installation)")
+        # Hide the dropdown arrow — selection happens via Browse button
+        self._ue_folder_combo.setStyleSheet(
+            "QComboBox::drop-down { width: 0px; border: none; }"
+            "QComboBox::down-arrow { image: none; }"
+        )
         self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
         folder_row.addWidget(self._ue_folder_combo)
 
@@ -238,16 +242,6 @@ class PluginManagerTab(QWidget):
         return label
 
     @staticmethod
-    def _format_ue_path(path: str) -> str:
-        """Format a UE path like 'C:\\...\\UE_5.5' into a display name 'UE 5.5'."""
-        base = os.path.basename(os.path.normpath(path))
-        if base.upper().startswith("UE_"):
-            label = "UE " + base[3:]
-        else:
-            label = base
-        return label
-
-    @staticmethod
     def _make_vsep() -> QFrame:
         sep = QFrame()
         sep.setFrameShape(QFrame.VLine)
@@ -309,13 +303,11 @@ class PluginManagerTab(QWidget):
     def _discover_paths(self):
         self._ue_folder_combo.blockSignals(True)
         self._ue_folder_combo.clear()
-        self._ue_folder_combo.addItem("(select a UE installation)")
 
         # Auto-discover from registry + common filesystem locations
         paths = discover_ue_installations()
         for p in paths:
-            display = self._format_ue_path(p)
-            self._ue_folder_combo.addItem(display)
+            self._ue_folder_combo.addItem(p)
             idx = self._ue_folder_combo.count() - 1
             self._ue_folder_combo.setItemData(idx, p, Qt.UserRole)
             self._ue_folder_combo.setItemData(idx, p, Qt.ToolTipRole)
@@ -324,14 +316,12 @@ class PluginManagerTab(QWidget):
 
         # Auto-select the first discovered installation
         if paths:
-            self._ue_folder_combo.setCurrentIndex(1)
+            self._ue_folder_combo.setCurrentIndex(0)
 
     # ── Event Handlers ──
 
     def _on_folder_selected(self, index: int):
-        if index <= 0:
-            self._current_ue_root = ""
-            self._ue_path_label.setVisible(False)
+        if index < 0:
             return
         self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or self._ue_folder_combo.currentText()
         self._ue_path_label.setText(self._current_ue_root)
@@ -357,8 +347,7 @@ class PluginManagerTab(QWidget):
                 self._ue_folder_combo.setCurrentIndex(i)
                 return
 
-        display = self._format_ue_path(path)
-        self._ue_folder_combo.addItem(display)
+        self._ue_folder_combo.addItem(path)
         idx = self._ue_folder_combo.count() - 1
         self._ue_folder_combo.setItemData(idx, path, Qt.UserRole)
         self._ue_folder_combo.setItemData(idx, path, Qt.ToolTipRole)
