@@ -1,6 +1,7 @@
 """Handles copying engine files to/from a UE installation directory."""
 
 import os
+import shutil
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
@@ -131,6 +132,46 @@ class FilePatcher:
             files_to_copy, files_to_remove, ignored_targets,
         )
 
+        ver_dir = os.path.join(versions_root, engine_version.engine_version)
+
+        if custom_engine:
+            # ── Back up originals before overwriting ──
+            for i, (src, dst) in enumerate(files_to_copy):
+                if not os.path.isfile(dst):
+                    continue  # No original to back up — file doesn't exist in UE yet
+                # Compute backup path inside version dir
+                target_rel = os.path.relpath(dst, ue_install_dir)
+                backup_abs = os.path.join(ver_dir, "_originals", target_rel)
+                backup_dir = os.path.dirname(backup_abs)
+                if backup_dir and not os.path.isdir(backup_dir):
+                    os.makedirs(backup_dir, exist_ok=True)
+                try:
+                    if os.path.isfile(backup_abs):
+                        os.chmod(backup_abs, os.stat(backup_abs).st_mode | 0o200)
+                    shutil.copy2(dst, backup_abs)
+                    os.chmod(backup_abs, os.stat(backup_abs).st_mode & ~0o222)
+
+                    # Update the EngineFile entry so path_default points to the backup
+                    target = os.path.relpath(dst, ue_install_dir).replace("\\", "/")
+                    for fe in engine_version.files:
+                        if fe.path_target.replace("\\", "/") == target:
+                            backup_rel = f"_originals/{target_rel.replace(chr(92), '/')}"
+                            fe.path_default = backup_rel
+                            break
+                    result.files_removed += 1  # Reuse as "backed up" counter
+                except OSError as e:
+                    result.success = False
+                    result.message = f"Failed to back up {dst}: {e}"
+                    return result
+
+            # Save updated path_default back to info.dat so revert can find originals
+            if result.files_removed > 0:
+                try:
+                    from patcher.version_io import write_info
+                    write_info(engine_version)
+                except OSError:
+                    pass  # Non-fatal — backups exist on disk anyway
+
         # Verify sources exist
         for src, _ in files_to_copy:
             if not os.path.isfile(src):
@@ -138,7 +179,7 @@ class FilePatcher:
                 result.message = f"Source file not found: {src}"
                 return result
 
-        # Copy files
+        # Copy files (custom → UE, or default → UE on revert)
         for src, dst in files_to_copy:
             dst_dir = os.path.dirname(dst)
             if dst_dir and not os.path.isdir(dst_dir):
@@ -156,7 +197,7 @@ class FilePatcher:
                 result.message = f"Failed to copy {src} -> {dst}: {e}"
                 return result
 
-        # Remove files
+        # Remove files (only orphan files that exist in backup but no longer in manifest)
         for file_path in files_to_remove:
             if not os.path.isfile(file_path):
                 continue
