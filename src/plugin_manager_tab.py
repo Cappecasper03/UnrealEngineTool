@@ -41,6 +41,8 @@ class ScanWorker(QObject):
 
 class SortableTreeItem(QTreeWidgetItem):
     """QTreeWidgetItem that sorts Enabled column by checkbox state, with name as tie-breaker."""
+    COL_NAME = 1
+
     def __lt__(self, other):
         col = self.treeWidget().sortColumn() if self.treeWidget() else 0
         if col == 0:
@@ -48,7 +50,7 @@ class SortableTreeItem(QTreeWidgetItem):
             if a != b:
                 return b < a  # descending: checked (2) before unchecked (0)
             # Same checkbox state — secondary sort by name
-            return self.text(self.treeWidget().COL_NAME).lower() < other.text(self.treeWidget().COL_NAME).lower()
+            return self.text(self.COL_NAME).lower() < other.text(self.COL_NAME).lower()
         return self.text(col).lower() < other.text(col).lower()
 
 
