@@ -39,6 +39,15 @@ class ScanWorker(QObject):
             self.error.emit(str(e))
 
 
+class SortableTreeItem(QTreeWidgetItem):
+    """QTreeWidgetItem that sorts Enabled column by checkbox state."""
+    def __lt__(self, other):
+        col = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        if col == 0:
+            return self.checkState(col) < other.checkState(col)
+        return self.text(col).lower() < other.text(col).lower()
+
+
 class PluginManagerTab(QWidget):
     """Plugin Manager tab with tree, search, filter, and actions."""
 
@@ -189,12 +198,11 @@ class PluginManagerTab(QWidget):
         self._tree.setSortingEnabled(True)
         self._tree.itemChanged.connect(self._on_item_changed)
 
-        # Columns: Enabled sizes to content, others by display text
+        # Columns: Enabled sizes to content, description fills remaining space
         header = self._tree.header()
         header.setStretchLastSection(False)
-        header.setSortRole(Qt.UserRole + 1)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
         header.resizeSection(self.COL_NAME, 220)
         header.resizeSection(self.COL_CATEGORY, 150)
         # User can drag column borders to resize; horizontal scrollbar appears when content exceeds width
@@ -436,7 +444,7 @@ class PluginManagerTab(QWidget):
         self._item_plugins.clear()
 
         for plugin in filtered:
-            item = QTreeWidgetItem()
+            item = SortableTreeItem()
 
             # Native tree-item checkboxes — reliable with sorting enabled
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -447,12 +455,6 @@ class PluginManagerTab(QWidget):
             item.setText(self.COL_CATEGORY, plugin.category)
 
             item.setText(self.COL_DESCRIPTION, plugin.description)
-
-            # Sort data for each column (custom sort role)
-            item.setData(self.COL_ENABLED, Qt.UserRole + 1, 0 if plugin.enabled_by_default else 1)
-            item.setData(self.COL_NAME, Qt.UserRole + 1, plugin.name.lower())
-            item.setData(self.COL_CATEGORY, Qt.UserRole + 1, plugin.category.lower())
-            item.setData(self.COL_DESCRIPTION, Qt.UserRole + 1, plugin.description.lower())
 
             # Store reference so itemChanged handler can find the PluginData
             item.setData(0, Qt.UserRole, id(plugin))
@@ -472,7 +474,6 @@ class PluginManagerTab(QWidget):
             return
         checked = item.checkState(self.COL_ENABLED) == Qt.Checked
         plugin.enabled_by_default = checked
-        item.setData(self.COL_ENABLED, Qt.UserRole + 1, 0 if checked else 1)
         self._update_stats()
 
     def _bulk_toggle(self, enabled: bool):
