@@ -57,7 +57,6 @@ class PluginManagerTab(QWidget):
         self._plugins: List[PluginData] = []
         self._original_plugins: List[PluginData] = []
         self._current_ue_root = ""
-        self._show_all = True
         self._search_filter = ""
         self._is_scanning = False
         self._item_plugins: dict = {}
@@ -110,22 +109,7 @@ class PluginManagerTab(QWidget):
         layout.addLayout(scan_row)
 
         # ── Section 2: Toolbar ──
-        layout.addWidget(self._make_section_label("Plugins"))
-
         toolbar1 = QHBoxLayout()
-
-        self._show_all_btn = QPushButton("Show All")
-        self._show_all_btn.setCheckable(True)
-        self._show_all_btn.setChecked(True)
-        self._show_all_btn.clicked.connect(lambda: self._set_filter(True))
-        toolbar1.addWidget(self._show_all_btn)
-
-        self._show_enabled_btn = QPushButton("Enabled Only")
-        self._show_enabled_btn.setCheckable(True)
-        self._show_enabled_btn.clicked.connect(lambda: self._set_filter(False))
-        toolbar1.addWidget(self._show_enabled_btn)
-
-        toolbar1.addWidget(self._make_vsep())
 
         self._select_all_btn = QPushButton("Select All")
         self._select_all_btn.clicked.connect(lambda: self._bulk_toggle(True))
@@ -205,11 +189,13 @@ class PluginManagerTab(QWidget):
         self._tree.setSortingEnabled(True)
         self._tree.itemChanged.connect(self._on_item_changed)
 
-        # All columns resizable by user (Interactive default); Description auto-sizes to content
+        # Columns: Enabled sorts by checkbox state, others by display text
         header = self._tree.header()
         header.setStretchLastSection(False)
+        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
+        header.setSortRole(self.COL_ENABLED, Qt.CheckStateRole)
+        header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeToContents)
-        header.resizeSection(self.COL_ENABLED, 60)
         header.resizeSection(self.COL_NAME, 220)
         header.resizeSection(self.COL_CATEGORY, 150)
         # User can drag column borders to resize; horizontal scrollbar appears when content exceeds width
@@ -253,12 +239,6 @@ class PluginManagerTab(QWidget):
         sep.setStyleSheet(f"color: {C_TEXT_DIM};")
         return sep
 
-    def _set_filter(self, show_all: bool):
-        self._show_all = show_all
-        self._show_all_btn.setChecked(show_all)
-        self._show_enabled_btn.setChecked(not show_all)
-        self._refresh_view()
-
     def _update_stats(self):
         total = len(self._plugins)
         enabled = sum(1 for p in self._plugins if p.enabled_by_default)
@@ -280,8 +260,6 @@ class PluginManagerTab(QWidget):
 
     def _count_filtered(self) -> int:
         filtered = self._plugins
-        if not self._show_all:
-            filtered = [p for p in filtered if p.enabled_by_default]
         if self._search_filter:
             s = self._search_filter.lower()
             filtered = [
@@ -440,8 +418,6 @@ class PluginManagerTab(QWidget):
         self._tree.clear()
 
         filtered = self._plugins
-        if not self._show_all:
-            filtered = [p for p in filtered if p.enabled_by_default]
         if self._search_filter:
             s = self._search_filter.lower()
             filtered = [
