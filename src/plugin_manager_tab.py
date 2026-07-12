@@ -172,10 +172,6 @@ class PluginManagerTab(QWidget):
         self._apply_btn.clicked.connect(self._on_apply_changes)
         toolbar1.addWidget(self._apply_btn)
 
-        self._apply_badge = QLabel("")
-        self._apply_badge.setFixedWidth(30)
-        toolbar1.addWidget(self._apply_badge)
-
         layout.addLayout(toolbar1)
 
         # Toolbar row 2: search
@@ -221,10 +217,6 @@ class PluginManagerTab(QWidget):
         self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         status_row.addWidget(self._stats_label)
 
-        self._status_label = QLabel("")
-        self._status_label.setWordWrap(True)
-        status_row.addWidget(self._status_label)
-
         layout.addLayout(status_row)
 
         # Initial state
@@ -263,13 +255,10 @@ class PluginManagerTab(QWidget):
             return
 
         filter_info = f" (showing {filtered})" if filtered != total else ""
-        self._stats_label.setText(f"{enabled} enabled  \u00b7  {total} total{filter_info}")
-
+        stats_text = f"{enabled} enabled  \u00b7  {total} total{filter_info}"
         if modified > 0:
-            self._apply_badge.setText(f"  {modified} modified")
-            self._apply_badge.setStyleSheet(f"color: {C_ACCENT_ORANGE}; font-weight: 600;")
-        else:
-            self._apply_badge.setText("")
+            stats_text += f"  ·  <span style='color: {C_ACCENT_ORANGE}; font-weight: 600;'>{modified} modified</span>"
+        self._stats_label.setText(stats_text)
 
     def _count_filtered(self) -> int:
         filtered = self._plugins
@@ -329,9 +318,6 @@ class PluginManagerTab(QWidget):
 
         # Validate
         test_file = os.path.join(path, "Engine", "Binaries", "Win64", "UnrealEditor-Engine.dll")
-        if not os.path.isfile(test_file):
-            self._status_label.setStyleSheet(f"color: {C_ACCENT_ORANGE};")
-            self._status_label.setText("Warning: selected directory does not look like a UE installation.")
 
         # Check if already in combo (match on stored path)
         norm_path = os.path.normpath(path).lower()
@@ -353,7 +339,6 @@ class PluginManagerTab(QWidget):
         self._scanning_label.setText(f"Scanning {self._current_ue_root}...")
         self._scanning_label.setVisible(True)
         self._scan_progress.setVisible(True)
-        self._status_label.setText("")
         self._plugins.clear()
         self._tree.clear()
 
@@ -407,14 +392,11 @@ class PluginManagerTab(QWidget):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(backup_dir, f"auto_{version}_{ts}.backup")
         self._backup.save_backup(path, self._plugins, self._current_ue_root)
-        self._status_label.setText(f"Auto-backup saved: {os.path.basename(path)}")
 
     def _on_scan_error(self, error_msg: str):
         self._scanning_label.setVisible(False)
         self._scan_progress.setVisible(False)
         self._is_scanning = False
-        self._status_label.setStyleSheet(f"color: {C_ACCENT_ORANGE};")
-        self._status_label.setText(f"Scan error: {error_msg}")
 
     def _on_search_changed(self, text: str):
         self._search_filter = text
@@ -560,8 +542,6 @@ class PluginManagerTab(QWidget):
             p.snapshot_original()
         self._refresh_view()
         self._update_stats()
-        self._status_label.setStyleSheet("")
-        self._status_label.setText("Changes reverted to original state.")
 
     def _on_save_template(self):
         template_dir = self._template_dir()
