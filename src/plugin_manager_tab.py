@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, Signal, QObject, QThread
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QLineEdit, QTreeWidget, QTreeWidgetItem, QLabel, QProgressBar,
-    QFileDialog, QMessageBox, QCheckBox, QFrame, QSizePolicy, QHeaderView,
+    QFileDialog, QMessageBox, QFrame, QSizePolicy, QHeaderView,
 )
 
 from models import PluginData
@@ -44,10 +44,8 @@ class PluginManagerTab(QWidget):
     # Tree columns
     COL_ENABLED = 0
     COL_NAME = 1
-    COL_FRIENDLY = 2
-    COL_CATEGORY = 3
-    COL_INSTALLED = 4
-    COL_DESCRIPTION = 5
+    COL_CATEGORY = 2
+    COL_DESCRIPTION = 3
 
     def __init__(self):
         super().__init__()
@@ -61,6 +59,7 @@ class PluginManagerTab(QWidget):
         self._show_all = True
         self._search_filter = ""
         self._is_scanning = False
+        self._item_plugins: dict = {}
 
         self._build_ui()
         self._discover_paths()
@@ -185,14 +184,24 @@ class PluginManagerTab(QWidget):
 
         # ── Section 3: Plugin Tree ──
         self._tree = QTreeWidget()
-        self._tree.setColumnCount(6)
-        self._tree.setHeaderLabels(["Enabled", "Name", "Friendly Name", "Category", "Installed", "Description"])
+        self._tree.setColumnCount(4)
+        self._tree.setHeaderLabels(["Enabled", "Name", "Category", "Description"])
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
         self._tree.setSelectionMode(QTreeWidget.NoSelection)
         self._tree.setAnimated(True)
         self._tree.setSortingEnabled(True)
         self._tree.itemChanged.connect(self._on_item_changed)
+
+        # All columns resizable by user (Interactive default); Description auto-sizes to content
+        header = self._tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeToContents)
+        header.resizeSection(self.COL_ENABLED, 60)
+        header.resizeSection(self.COL_NAME, 220)
+        header.resizeSection(self.COL_CATEGORY, 150)
+        # User can drag column borders to resize; horizontal scrollbar appears when content exceeds width
+
         layout.addWidget(self._tree, 1)
 
         # ── Section 4: Status bar ──
@@ -284,6 +293,7 @@ class PluginManagerTab(QWidget):
     # ── Discovery ──
 
     def _discover_paths(self):
+        self._ue_folder_combo.blockSignals(True)
         self._ue_folder_combo.clear()
         self._ue_folder_combo.addItem("(select a UE installation)")
 
@@ -294,6 +304,12 @@ class PluginManagerTab(QWidget):
             self._ue_folder_combo.setItemData(
                 self._ue_folder_combo.count() - 1, p, Qt.ToolTipRole,
             )
+
+        self._ue_folder_combo.blockSignals(False)
+
+        # Auto-select the first discovered installation
+        if paths:
+            self._ue_folder_combo.setCurrentIndex(1)
 
     # ── Event Handlers ──
 
@@ -389,6 +405,7 @@ class PluginManagerTab(QWidget):
         self._refresh_view()
 
     def _refresh_view(self):
+        self._tree.blockSignals(True)
         self._tree.clear()
 
         filtered = self._plugins
@@ -400,52 +417,50 @@ class PluginManagerTab(QWidget):
                 p for p in filtered
                 if s in p.name.lower() or s in p.friendly_name.lower() or s in p.description.lower()
             ]
+            # Prioritize: friendly name matches first, then name matches, then description-only
+            def _search_rank(p) -> tuple:
+                lower = p.friendly_name.lower() if p.friendly_name else ""
+                if s in lower:
+                    return 0
+                if s in p.name.lower():
+                    return 1
+                return 2
+            filtered.sort(key=_search_rank)
+
+        self._item_plugins.clear()
 
         for plugin in filtered:
             item = QTreeWidgetItem()
 
-            # Enabled checkbox
-            chk = QWidget()
-            chk_layout = QHBoxLayout(chk)
-            chk_layout.setContentsMargins(8, 0, 8, 0)
-            chk_layout.setAlignment(Qt.AlignCenter)
-            cb = QCheckBox()
-            cb.setChecked(plugin.enabled_by_default)
-            cb.stateChanged.connect(lambda state, p=plugin: self._on_checkbox_changed(p, state))
-            chk_layout.addWidget(cb)
-            self._tree.setItemWidget(item, self.COL_ENABLED, chk)
+            # Native tree-item checkboxes — reliable with sorting enabled
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(self.COL_ENABLED, Qt.Checked if plugin.enabled_by_default else Qt.Unchecked)
 
             item.setText(self.COL_NAME, plugin.name)
-            item.setText(self.COL_FRIENDLY, plugin.friendly_name)
+            item.setToolTip(self.COL_NAME, plugin.friendly_name)
             item.setText(self.COL_CATEGORY, plugin.category)
-
-            # Installed checkbox
-            inst_w = QWidget()
-            inst_layout = QHBoxLayout(inst_w)
-            inst_layout.setContentsMargins(8, 0, 8, 0)
-            inst_layout.setAlignment(Qt.AlignCenter)
-            inst_cb = QCheckBox()
-            inst_cb.setChecked(plugin.installed)
-            inst_cb.stateChanged.connect(lambda state, p=plugin: self._on_installed_changed(p, state))
-            inst_layout.addWidget(inst_cb)
-            self._tree.setItemWidget(item, self.COL_INSTALLED, inst_w)
 
             item.setText(self.COL_DESCRIPTION, plugin.description)
 
+            # Store reference so itemChanged handler can find the PluginData
+            item.setData(0, Qt.UserRole, id(plugin))
+            self._item_plugins[id(plugin)] = plugin
+
             self._tree.addTopLevelItem(item)
 
-        self._update_stats()
-
-    def _on_checkbox_changed(self, plugin: PluginData, state: int):
-        plugin.enabled_by_default = bool(state)
-        self._update_stats()
-
-    def _on_installed_changed(self, plugin: PluginData, state: int):
-        plugin.installed = bool(state)
+        self._tree.blockSignals(False)
         self._update_stats()
 
     def _on_item_changed(self, item: QTreeWidgetItem, column: int):
-        pass  # Handled by widget signals
+        if column != self.COL_ENABLED:
+            return
+        plugin_id = item.data(0, Qt.UserRole)
+        plugin = self._item_plugins.get(plugin_id)
+        if plugin is None:
+            return
+        checked = item.checkState(self.COL_ENABLED) == Qt.Checked
+        plugin.enabled_by_default = checked
+        self._update_stats()
 
     def _bulk_toggle(self, enabled: bool):
         for p in self._plugins:

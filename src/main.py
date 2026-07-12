@@ -107,12 +107,6 @@ class MainWindow(QMainWindow):
 
 
 def main():
-    # Enable High DPI support
-    if hasattr(Qt, "AA_EnableHighDpiScaling"):
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    if hasattr(Qt, "AA_UseHighDpiPixmaps"):
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-
     app = QApplication(sys.argv)
 
     # Apply UE5 dark theme
