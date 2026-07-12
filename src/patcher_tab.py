@@ -136,6 +136,11 @@ class PatcherTab(QWidget):
         self._version_picker.currentIndexChanged.connect(self._on_version_selected)
         patch_row.addWidget(self._version_picker, 1)
 
+        self._manage_btn = QPushButton("Manage")
+        self._manage_btn.setObjectName("toolBtn")
+        self._manage_btn.clicked.connect(self._on_manage_versions)
+        patch_row.addWidget(self._manage_btn)
+
         self._version_count_label = QLabel("")
         self._version_count_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self._version_count_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; background: transparent;")
@@ -202,13 +207,6 @@ class PatcherTab(QWidget):
         self._apply_default_btn.setMinimumWidth(160)
         self._apply_default_btn.clicked.connect(lambda: self._on_apply(False))
         action_row.addWidget(self._apply_default_btn)
-
-        action_row.addSpacing(10)
-
-        self._manage_btn = QPushButton("Manage")
-        self._manage_btn.setObjectName("toolBtn")
-        self._manage_btn.clicked.connect(self._on_manage_versions)
-        action_row.addWidget(self._manage_btn)
 
         action_row.addStretch(1)
 
