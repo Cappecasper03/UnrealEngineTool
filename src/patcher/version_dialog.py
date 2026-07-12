@@ -87,11 +87,11 @@ def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
 def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tuple]:
     """Scan Engine/Intermediate/Build/Win64/ for generated and precompiled files.
 
-    RPEngineInstaller requires:
-      - .generated.h   (under Inc/ — for GENERATED_BODY() headers)
-      - .cpp.obj       (under Development/ and Shipping/)
-      - .h.obj         (under Development/ and Shipping/)
-      - .precompiled   (under Development/ and Shipping/)
+    Actual UE path structure:
+      Win64/{Target}/
+        Inc/{Module}/.../{File}.generated.h
+        Development/{Module}/{File}.cpp.obj / .h.obj / .precompiled
+        Shipping/{Module}/{File}.cpp.obj / .h.obj / .precompiled
 
     Returns list of (relative_path, abs_path) tuples.
     """
@@ -102,37 +102,50 @@ def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tu
     if not os.path.isdir(base):
         return []
 
+    # Normalise module names for case-insensitive comparison
+    module_lower = {m.lower() for m in source_modules if m}
+
     results = []
-    for module in source_modules:
-        if not module:
+    precompiled_exts = {".cpp.obj", ".h.obj", ".precompiled"}
+
+    # Iterate over target directories (UnrealEditor, UnrealGame, etc.)
+    for target in sorted(os.listdir(base)):
+        target_dir = os.path.join(base, target)
+        if not os.path.isdir(target_dir):
             continue
 
-        mod_dir = os.path.join(base, module)
-        if not os.path.isdir(mod_dir):
-            continue
-
-        # --- Generated files (Inc/) ---
-        inc_dir = os.path.join(mod_dir, "Inc")
+        # --- Generated files: Inc/{Module}/.../*.generated.h ---
+        inc_dir = os.path.join(target_dir, "Inc")
         if os.path.isdir(inc_dir):
-            for fn in sorted(os.listdir(inc_dir)):
-                if fn.lower().endswith(".generated.h"):
-                    rel = f"Engine/Intermediate/Build/Win64/{module}/Inc/{fn}"
-                    results.append((rel, os.path.join(inc_dir, fn)))
+            for root, _dirs, files in os.walk(inc_dir):
+                for fn in files:
+                    if not fn.lower().endswith(".generated.h"):
+                        continue
+                    # Check module name is part of the relative path under Inc/
+                    rel_under_inc = os.path.relpath(root, inc_dir).replace("\\", "/")
+                    path_parts = rel_under_inc.split("/")
+                    if not path_parts or path_parts[0].lower() not in module_lower:
+                        continue
+                    full_rel = f"Engine/Intermediate/Build/Win64/{target}/Inc/{rel_under_inc}/{fn}"
+                    results.append((full_rel, os.path.join(root, fn)))
 
         # --- Precompiled files per config ---
-        precompiled_exts = {".cpp.obj", ".h.obj", ".precompiled"}
         for config in ("Development", "Shipping"):
-            cfg_dir = os.path.join(mod_dir, config)
+            cfg_dir = os.path.join(target_dir, config)
             if not os.path.isdir(cfg_dir):
                 continue
-            for fn in sorted(os.listdir(cfg_dir)):
-                ext = os.path.splitext(fn)[1].lower()
-                stem = os.path.splitext(fn)[0].lower()
-                # .cpp.obj and .h.obj have two dots — check full suffix
-                full_lower = fn.lower()
-                if any(full_lower.endswith(e) for e in precompiled_exts):
-                    rel = f"Engine/Intermediate/Build/Win64/{module}/{config}/{fn}"
-                    results.append((rel, os.path.join(cfg_dir, fn)))
+            for root, _dirs, files in os.walk(cfg_dir):
+                for fn in files:
+                    full_lower = fn.lower()
+                    if not any(full_lower.endswith(e) for e in precompiled_exts):
+                        continue
+                    # Check module name is part of the relative path under config/
+                    rel_under_cfg = os.path.relpath(root, cfg_dir).replace("\\", "/")
+                    path_parts = rel_under_cfg.split("/")
+                    if not path_parts or path_parts[0].lower() not in module_lower:
+                        continue
+                    full_rel = f"Engine/Intermediate/Build/Win64/{target}/{config}/{rel_under_cfg}/{fn}"
+                    results.append((full_rel, os.path.join(root, fn)))
 
     return results
 
