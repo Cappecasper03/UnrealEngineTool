@@ -5,16 +5,17 @@ import threading
 from datetime import datetime
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, Signal, QObject, QThread
+from PySide6.QtCore import Qt, QSettings, Signal, QObject, QThread
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
     QLineEdit, QTreeWidget, QTreeWidgetItem, QLabel, QProgressBar,
     QFileDialog, QMessageBox, QFrame, QSizePolicy, QHeaderView,
+    QCheckBox, QSpinBox,
 )
 
 from models import PluginData
 from registry_helper import discover_ue_installations
-from theme import C_ACCENT_ORANGE, C_ACCENT, C_ACCENT_GREEN, C_TEXT_DIM, C_TEXT_BRIGHT
+from theme import C_ACCENT_ORANGE, C_ACCENT, C_ACCENT_GREEN, C_TEXT_DIM, C_TEXT_BRIGHT, C_BORDER, C_PANEL
 from plugin_manager.scanner import UPluginScanner
 from plugin_manager.patcher import UPluginPatcher
 from plugin_manager.backup_manager import BackupManager
@@ -217,6 +218,21 @@ class PluginManagerTab(QWidget):
         self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         status_row.addWidget(self._stats_label)
 
+        self._backup_cb = QCheckBox("Auto backup")
+        self._backup_cb.setChecked(self._load_backup_enabled())
+        self._backup_cb.toggled.connect(self._on_backup_toggle)
+        self._backup_cb.setToolTip("Enable automatic backup on scan")
+
+        self._keep_spin = QSpinBox()
+        self._keep_spin.setRange(1, 100)
+        self._keep_spin.setFixedWidth(52)
+        self._keep_spin.setValue(self._load_keep_count())
+        self._keep_spin.setToolTip("Auto backups to keep per engine version")
+        self._keep_spin.valueChanged.connect(self._on_keep_changed)
+        self._keep_spin.setEnabled(self._backup_cb.isChecked())
+        status_row.addWidget(self._backup_cb)
+        status_row.addWidget(self._keep_spin)
+
         layout.addLayout(status_row)
 
         # Initial state
@@ -386,12 +402,41 @@ class PluginManagerTab(QWidget):
         """Save an automatic timestamped backup after a fresh scan."""
         if not self._current_ue_root or not self._plugins:
             return
+        settings = QSettings("UnrealEngineTool", "PluginManager")
+        if not settings.value("auto_backup/enabled", True, type=bool):
+            return
         backup_dir = self._backup_dir()
         os.makedirs(backup_dir, exist_ok=True)
         version = os.path.basename(self._current_ue_root.rstrip("/\\"))
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(backup_dir, f"auto_{version}_{ts}.backup")
         self._backup.save_backup(path, self._plugins, self._current_ue_root)
+
+        # Prune old backups beyond the keep limit
+        keep = settings.value("auto_backup/keep_count", 10, type=int)
+        backups = sorted(
+            f for f in os.listdir(backup_dir)
+            if f.startswith(f"auto_{version}_") and f.endswith(".backup")
+        )
+        while len(backups) > keep:
+            os.remove(os.path.join(backup_dir, backups.pop(0)))
+
+    def _on_backup_toggle(self, checked: bool):
+        """Save auto-backup toggle to settings."""
+        QSettings("UnrealEngineTool", "PluginManager").setValue("auto_backup/enabled", checked)
+        self._keep_spin.setEnabled(checked)
+
+    def _on_keep_changed(self, value: int):
+        """Save keep count to settings."""
+        QSettings("UnrealEngineTool", "PluginManager").setValue("auto_backup/keep_count", value)
+
+    @staticmethod
+    def _load_backup_enabled() -> bool:
+        return QSettings("UnrealEngineTool", "PluginManager").value("auto_backup/enabled", True, type=bool)
+
+    @staticmethod
+    def _load_keep_count() -> int:
+        return QSettings("UnrealEngineTool", "PluginManager").value("auto_backup/keep_count", 10, type=int)
 
     def _on_scan_error(self, error_msg: str):
         self._scanning_label.setVisible(False)
