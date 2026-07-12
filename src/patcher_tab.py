@@ -339,9 +339,7 @@ class PatcherTab(QWidget):
         version = self._versions[idx]
 
         # Build changelog with parent inheritance
-        text_parts = [
-            f"=== Patch {version.engine_version} ===  (UE {version.unreal_version})\n"
-        ]
+        text_parts = []
         if version.changelog:
             text_parts.append(f"Changelog:\n{version.changelog}\n")
 
