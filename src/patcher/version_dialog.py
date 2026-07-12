@@ -84,6 +84,59 @@ def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
     return results
 
 
+def _discover_module_intermediates(ue_root: str, source_modules: set) -> List[tuple]:
+    """Scan Engine/Intermediate/Build/Win64/ for generated and precompiled files.
+
+    RPEngineInstaller requires:
+      - .generated.h   (under Inc/ — for GENERATED_BODY() headers)
+      - .cpp.obj       (under Development/ and Shipping/)
+      - .h.obj         (under Development/ and Shipping/)
+      - .precompiled   (under Development/ and Shipping/)
+
+    Returns list of (relative_path, abs_path) tuples.
+    """
+    if not source_modules:
+        return []
+
+    base = os.path.join(ue_root, "Engine", "Intermediate", "Build", "Win64")
+    if not os.path.isdir(base):
+        return []
+
+    results = []
+    for module in source_modules:
+        if not module:
+            continue
+
+        mod_dir = os.path.join(base, module)
+        if not os.path.isdir(mod_dir):
+            continue
+
+        # --- Generated files (Inc/) ---
+        inc_dir = os.path.join(mod_dir, "Inc")
+        if os.path.isdir(inc_dir):
+            for fn in sorted(os.listdir(inc_dir)):
+                if fn.lower().endswith(".generated.h"):
+                    rel = f"Engine/Intermediate/Build/Win64/{module}/Inc/{fn}"
+                    results.append((rel, os.path.join(inc_dir, fn)))
+
+        # --- Precompiled files per config ---
+        precompiled_exts = {".cpp.obj", ".h.obj", ".precompiled"}
+        for config in ("Development", "Shipping"):
+            cfg_dir = os.path.join(mod_dir, config)
+            if not os.path.isdir(cfg_dir):
+                continue
+            for fn in sorted(os.listdir(cfg_dir)):
+                ext = os.path.splitext(fn)[1].lower()
+                stem = os.path.splitext(fn)[0].lower()
+                # .cpp.obj and .h.obj have two dots — check full suffix
+                full_lower = fn.lower()
+                if any(full_lower.endswith(e) for e in precompiled_exts):
+                    rel = f"Engine/Intermediate/Build/Win64/{module}/{config}/{fn}"
+                    results.append((rel, os.path.join(cfg_dir, fn)))
+
+    return results
+
+
 class FileEntryDialog(QDialog):
     """Dialog for selecting one or more files and returning EngineFile entries.
 
@@ -184,24 +237,34 @@ class FileEntryDialog(QDialog):
 
         # Auto-discover matching module binaries from any detected UE roots
         binary_count_total = 0
+        intermediate_count_total = 0
+        
+        def _add_discovered(rel_path: str, abs_path: str, tag: str, counter: int) -> int:
+            """Add a discovered file entry, skipping duplicates. Returns new count."""
+            if any(e.path_custom == rel_path for e in self._entries):
+                return counter
+            entry = EngineFile(
+                path_custom=rel_path,
+                path_default="",
+                path_target=rel_path,
+                local_name=os.path.basename(rel_path),
+            )
+            self._entries.append(entry)
+            self._copied_abs.append(abs_path)
+            self._file_list.addItem(f"[{tag}] {rel_path}")
+            return counter + 1
+
         for ue_root in all_ue_roots:
             for rel_path, abs_path in _discover_binaries(ue_root, source_modules):
-                if any(e.path_custom == rel_path for e in self._entries):
-                    continue
-                entry = EngineFile(
-                    path_custom=rel_path,
-                    path_default="",
-                    path_target=rel_path,
-                    local_name=os.path.basename(rel_path),
-                )
-                self._entries.append(entry)
-                self._copied_abs.append(abs_path)
-                self._file_list.addItem(f"[binary] {rel_path}")
-                binary_count_total += 1
+                binary_count_total = _add_discovered(rel_path, abs_path, "bin", binary_count_total)
+            for rel_path, abs_path in _discover_module_intermediates(ue_root, source_modules):
+                intermediate_count_total = _add_discovered(rel_path, abs_path, "int", intermediate_count_total)
 
-        info_parts = [f"{len([e for e in self._entries if '[binary]' not in e.path_custom])} file(s) selected"]
+        info_parts = [f"{len([e for e in self._entries if '[bin]' not in e.path_custom and '[int]' not in e.path_custom])} file(s) selected"]
         if binary_count_total > 0:
             info_parts.append(f"{binary_count_total} binary(ies) auto-discovered")
+        if intermediate_count_total > 0:
+            info_parts.append(f"{intermediate_count_total} intermediate(s) auto-discovered")
         self._info_label.setText("  \u00b7  ".join(info_parts))
         self._add_btn.setEnabled(len(self._entries) > 0)
 
