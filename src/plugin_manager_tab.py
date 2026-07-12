@@ -189,11 +189,9 @@ class PluginManagerTab(QWidget):
         self._tree.setSortingEnabled(True)
         self._tree.itemChanged.connect(self._on_item_changed)
 
-        # Columns: Enabled sorts by checkbox state, others by display text
+        # Columns: Enabled sizes to content, others by display text
         header = self._tree.header()
         header.setStretchLastSection(False)
-        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
-        header.setSortRole(self.COL_ENABLED, Qt.CheckStateRole)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeToContents)
         header.resizeSection(self.COL_NAME, 220)
