@@ -341,7 +341,7 @@ class PatcherTab(QWidget):
         # Build changelog with parent inheritance
         text_parts = []
         if version.changelog:
-            text_parts.append(f"Changelog:\n{version.changelog}\n")
+            text_parts.append(f"{version.changelog}\n")
 
         parent_version = version.parent_version
         visited = set()
