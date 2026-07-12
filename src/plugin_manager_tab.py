@@ -192,6 +192,7 @@ class PluginManagerTab(QWidget):
         # Columns: Enabled sizes to content, others by display text
         header = self._tree.header()
         header.setStretchLastSection(False)
+        header.setSortRole(Qt.UserRole + 1)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeToContents)
         header.resizeSection(self.COL_NAME, 220)
@@ -447,6 +448,12 @@ class PluginManagerTab(QWidget):
 
             item.setText(self.COL_DESCRIPTION, plugin.description)
 
+            # Sort data for each column (custom sort role)
+            item.setData(self.COL_ENABLED, Qt.UserRole + 1, 0 if plugin.enabled_by_default else 1)
+            item.setData(self.COL_NAME, Qt.UserRole + 1, plugin.name.lower())
+            item.setData(self.COL_CATEGORY, Qt.UserRole + 1, plugin.category.lower())
+            item.setData(self.COL_DESCRIPTION, Qt.UserRole + 1, plugin.description.lower())
+
             # Store reference so itemChanged handler can find the PluginData
             item.setData(0, Qt.UserRole, id(plugin))
             self._item_plugins[id(plugin)] = plugin
@@ -465,6 +472,7 @@ class PluginManagerTab(QWidget):
             return
         checked = item.checkState(self.COL_ENABLED) == Qt.Checked
         plugin.enabled_by_default = checked
+        item.setData(self.COL_ENABLED, Qt.UserRole + 1, 0 if checked else 1)
         self._update_stats()
 
     def _bulk_toggle(self, enabled: bool):
