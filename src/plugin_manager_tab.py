@@ -44,7 +44,7 @@ class SortableTreeItem(QTreeWidgetItem):
     def __lt__(self, other):
         col = self.treeWidget().sortColumn() if self.treeWidget() else 0
         if col == 0:
-            return self.checkState(col) < other.checkState(col)
+            return other.checkState(col).value < self.checkState(col).value
         return self.text(col).lower() < other.text(col).lower()
 
 
