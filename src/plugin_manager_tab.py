@@ -261,7 +261,7 @@ class PluginManagerTab(QWidget):
         # CARD 3: Plugin List
         # ════════════════════════════════════════════
         card3, c3 = _make_section_card("Plugins")
-        c3.setContentsMargins(0, 4, 0, 0)
+        c3.setContentsMargins(4, 4, 0, 0)
         c3.setSpacing(0)
 
         self._tree = QTreeWidget()
