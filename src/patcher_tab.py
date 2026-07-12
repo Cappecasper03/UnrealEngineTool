@@ -340,7 +340,7 @@ class PatcherTab(QWidget):
 
         # Build changelog with parent inheritance
         text_parts = [
-            f"=== Rock Pocket Engine {version.engine_version} ===  (UE {version.unreal_version})\n"
+            f"=== Patch {version.engine_version} ===  (UE {version.unreal_version})\n"
         ]
         if version.changelog:
             text_parts.append(f"Changelog:\n{version.changelog}\n")
