@@ -442,6 +442,7 @@ class VersionManagerDialog(QDialog):
         file_btn_row = QHBoxLayout()
         self._file_add_btn = QPushButton("Add Files\u2026")
         self._file_add_btn.setEnabled(False)
+        self._file_add_btn.setToolTip("Set an Original Engine path before adding files")
         self._file_add_btn.clicked.connect(self._on_add_file)
         file_btn_row.addWidget(self._file_add_btn)
 
@@ -552,7 +553,7 @@ class VersionManagerDialog(QDialog):
 
         self._clone_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
-        self._file_add_btn.setEnabled(True)
+        self._file_add_btn.setEnabled(self._has_orig_engine_path())
         self._file_remove_btn.setEnabled(False)
 
     def _on_file_table_selection_changed(self, row: int, column: int, prev_row: int, prev_column: int):
@@ -679,9 +680,20 @@ class VersionManagerDialog(QDialog):
         self._orig_engine_combo.setCurrentIndex(idx)
 
     def _on_orig_engine_selected(self, index: int):
-        """Called when a path is chosen from the combo."""
-        if index < 0:
-            return
+        """Called when a path is chosen from the combo — refresh Add Files button."""
+        enabled = self._has_orig_engine_path()
+        self._file_add_btn.setEnabled(enabled)
+        self._file_add_btn.setToolTip(
+            "" if enabled else "Set an Original Engine path before adding files"
+        )
+
+    def _has_orig_engine_path(self) -> bool:
+        """Check whether a valid original engine directory is selected in the combo."""
+        idx = self._orig_engine_combo.currentIndex()
+        if idx < 0:
+            return False
+        path = self._orig_engine_combo.itemData(idx, Qt.UserRole) or ""
+        return bool(path) and os.path.isdir(path)
 
     @staticmethod
     def _populate_ue_paths(combo: QComboBox):
