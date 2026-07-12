@@ -172,6 +172,10 @@ class PluginManagerTab(QWidget):
         self._apply_btn.clicked.connect(self._on_apply_changes)
         toolbar1.addWidget(self._apply_btn)
 
+        self._apply_badge = QLabel("")
+        self._apply_badge.setFixedWidth(30)
+        toolbar1.addWidget(self._apply_badge)
+
         layout.addLayout(toolbar1)
 
         # Toolbar row 2: search
