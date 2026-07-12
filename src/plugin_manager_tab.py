@@ -95,12 +95,6 @@ class PluginManagerTab(QWidget):
 
         layout.addLayout(folder_row)
 
-        # Selected path label
-        self._ue_path_label = QLabel("")
-        self._ue_path_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 11px; padding: 0 0 2px 4px;")
-        self._ue_path_label.setVisible(False)
-        layout.addWidget(self._ue_path_label)
-
         # Scanning overlay
         scan_row = QHBoxLayout()
         self._scanning_label = QLabel("Scanning plugins...")
@@ -168,6 +162,11 @@ class PluginManagerTab(QWidget):
         toolbar1.addWidget(self._minimal_btn)
 
         toolbar1.addStretch(1)
+
+        self._revert_btn = QPushButton("Revert Changes")
+        self._revert_btn.setEnabled(False)
+        self._revert_btn.clicked.connect(self._on_revert_changes)
+        toolbar1.addWidget(self._revert_btn)
 
         self._apply_btn = QPushButton("Apply Changes")
         self._apply_btn.setEnabled(False)
@@ -300,6 +299,7 @@ class PluginManagerTab(QWidget):
         self._save_template_btn.setEnabled(enabled)
         self._load_template_btn.setEnabled(enabled)
         self._minimal_btn.setEnabled(enabled)
+        self._revert_btn.setEnabled(enabled)
         self._search_box.setEnabled(enabled)
         self._clear_search_btn.setEnabled(enabled)
 
@@ -330,8 +330,6 @@ class PluginManagerTab(QWidget):
         if index < 0:
             return
         self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or self._ue_folder_combo.currentText()
-        self._ue_path_label.setText(self._current_ue_root)
-        self._ue_path_label.setVisible(True)
         self._start_scan()
 
     def _on_browse(self):
@@ -557,15 +555,31 @@ class PluginManagerTab(QWidget):
         self._refresh_view()
         QMessageBox.information(self, "Backup Loaded", f"Restored {count} plugin states from backup.")
 
+    def _on_revert_changes(self):
+        """Reset all plugins back to their original enabled states before any edits."""
+        if not self._original_plugins or not self._plugins:
+            return
+        for p, orig in zip(self._plugins, self._original_plugins):
+            p.enabled_by_default = orig.enabled_by_default
+            p.snapshot_original()
+        self._refresh_view()
+        self._update_stats()
+        self._status_label.setStyleSheet("")
+        self._status_label.setText("Changes reverted to original state.")
+
     def _on_save_template(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save Template", "", "Template Files (*.template);;All Files (*)")
+        backup_dir = self._backup_dir()
+        os.makedirs(backup_dir, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(self, "Save Template", backup_dir, "Template Files (*.template);;All Files (*)")
         if not path:
             return
         self._backup.save_template(path, self._plugins)
         QMessageBox.information(self, "Template Saved", f"Template saved to:\n{path}")
 
     def _on_load_template(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load Template", "", "Template Files (*.template);;All Files (*)")
+        backup_dir = self._backup_dir()
+        os.makedirs(backup_dir, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(self, "Load Template", backup_dir, "Template Files (*.template);;All Files (*)")
         if not path:
             return
         count = self._backup.load_template(path, self._plugins)
