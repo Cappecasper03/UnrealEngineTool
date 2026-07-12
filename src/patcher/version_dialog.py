@@ -709,9 +709,19 @@ class VersionManagerDialog(QDialog):
         entries = dlg.get_entries()
         copied_paths = dlg.get_copied_paths()
 
+        # Determine the original engine directory: use version's stored path,
+        # or try to detect it from the picked files' UE roots
         original_engine_dir = version.unreal_dir
+        if not original_engine_dir or not os.path.isdir(original_engine_dir):
+            # Fall back: scan picked files for UE installation roots
+            for abs_path in copied_paths:
+                if abs_path and os.path.isfile(abs_path):
+                    root = _find_engine_root(abs_path)
+                    if root and os.path.isdir(root):
+                        original_engine_dir = root
+                        break
         if original_engine_dir and not os.path.isdir(original_engine_dir):
-            original_engine_dir = None  # Invalid path — skip original copies
+            original_engine_dir = None
 
         for i, entry in enumerate(entries):
             version.files.append(entry)
