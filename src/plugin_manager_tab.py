@@ -172,10 +172,6 @@ class PluginManagerTab(QWidget):
         self._apply_btn.clicked.connect(self._on_apply_changes)
         toolbar1.addWidget(self._apply_btn)
 
-        self._apply_badge = QLabel("")
-        self._apply_badge.setFixedWidth(30)
-        toolbar1.addWidget(self._apply_badge)
-
         layout.addLayout(toolbar1)
 
         # Toolbar row 2: search
@@ -524,6 +520,14 @@ class PluginManagerTab(QWidget):
             "UnrealEngineTool", "backups",
         )
 
+    @staticmethod
+    def _template_dir() -> str:
+        """Return the template directory path."""
+        return os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+            "UnrealEngineTool", "templates",
+        )
+
     def _on_save_backup(self):
         backup_dir = self._backup_dir()
         os.makedirs(backup_dir, exist_ok=True)
@@ -556,18 +560,18 @@ class PluginManagerTab(QWidget):
         self._status_label.setText("Changes reverted to original state.")
 
     def _on_save_template(self):
-        backup_dir = self._backup_dir()
-        os.makedirs(backup_dir, exist_ok=True)
-        path, _ = QFileDialog.getSaveFileName(self, "Save Template", backup_dir, "Template Files (*.template);;All Files (*)")
+        template_dir = self._template_dir()
+        os.makedirs(template_dir, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(self, "Save Template", template_dir, "Template Files (*.template);;All Files (*)")
         if not path:
             return
         self._backup.save_template(path, self._plugins)
         QMessageBox.information(self, "Template Saved", f"Template saved to:\n{path}")
 
     def _on_load_template(self):
-        backup_dir = self._backup_dir()
-        os.makedirs(backup_dir, exist_ok=True)
-        path, _ = QFileDialog.getOpenFileName(self, "Load Template", backup_dir, "Template Files (*.template);;All Files (*)")
+        template_dir = self._template_dir()
+        os.makedirs(template_dir, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(self, "Load Template", template_dir, "Template Files (*.template);;All Files (*)")
         if not path:
             return
         count = self._backup.load_template(path, self._plugins)
