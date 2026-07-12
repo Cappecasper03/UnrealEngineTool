@@ -39,18 +39,46 @@ def _find_engine_root(path: str) -> str:
     return norm[:idx]  # Everything before /Engine/
 
 
-def _discover_binaries(ue_root: str) -> List[tuple]:
-    """Scan Engine/Binaries/Win64 for .dll, .exe, .pdb files.
-    Returns list of (relative_path, abs_path) tuples."""
+def _module_name_from_path(rel_path: str) -> str:
+    """Extract the UE module name from an engine-relative source path.
+
+    Engine/Source/{Category}/{ModuleName}/...  →  ModuleName
+    Returns empty string if the path isn't under Engine/Source/.
+    """
+    # Normalise and split
+    parts = rel_path.replace("\\", "/").split("/")
+    # Expect: Engine, Source, <Category>, <ModuleName>, ...
+    if len(parts) >= 4 and parts[0].lower() == "engine" and parts[1].lower() == "source":
+        return parts[3]  # The module name
+    return ""
+
+
+def _discover_binaries(ue_root: str, source_modules: set) -> List[tuple]:
+    """Scan Engine/Binaries/Win64 for .dll, .exe, .pdb files matching the given module names.
+
+    Binary naming pattern: UnrealEditor-{ModuleName}.dll / .pdb / .exe
+    Only binaries for modules present in *source_modules* are returned.
+    Returns list of (relative_path, abs_path) tuples.
+    """
     bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Win64")
-    if not os.path.isdir(bin_dir):
+    if not os.path.isdir(bin_dir) or not source_modules:
         return []
+
+    # Build set of expected prefixes: UnrealEditor-<Module>.
+    prefixes = {f"UnrealEditor-{m}." for m in source_modules if m}
+
     results = []
     for fn in sorted(os.listdir(bin_dir)):
         ext = os.path.splitext(fn)[1].lower()
-        if ext in {".dll", ".exe", ".pdb"}:
-            rel = f"Engine/Binaries/Win64/{fn}"
-            results.append((rel, os.path.join(bin_dir, fn)))
+        if ext not in {".dll", ".exe", ".pdb"}:
+            continue
+        # Check if filename starts with any of the expected prefixes
+        for prefix in prefixes:
+            if fn.lower().startswith(prefix.lower()):
+                rel = f"Engine/Binaries/Win64/{fn}"
+                results.append((rel, os.path.join(bin_dir, fn)))
+                break  # One match per file is enough
+
     return results
 
 
@@ -80,7 +108,7 @@ class FileEntryDialog(QDialog):
 
         # Instructions
         layout.addWidget(QLabel("Select one or more files to add as patch entries."))
-        layout.addWidget(QLabel("Binaries from Engine/Binaries/Win64/ are auto-included."))
+        layout.addWidget(QLabel("Module binaries are auto-included based on selected source files."))
 
         # Browse button
         browse_row = QHBoxLayout()
@@ -145,11 +173,17 @@ class FileEntryDialog(QDialog):
             if ue_root:
                 all_ue_roots.add(ue_root)
 
-        # Auto-discover binaries from any detected UE installation roots
+        # Collect module names from user-picked source files
+        source_modules = set()
+        for entry in self._entries:
+            mod = _module_name_from_path(entry.path_custom)
+            if mod:
+                source_modules.add(mod)
+
+        # Auto-discover matching module binaries from any detected UE roots
         binary_count_total = 0
         for ue_root in all_ue_roots:
-            for rel_path, abs_path in _discover_binaries(ue_root):
-                # Skip duplicates already picked by user
+            for rel_path, abs_path in _discover_binaries(ue_root, source_modules):
                 if any(e.path_custom == rel_path for e in self._entries):
                     continue
                 entry = EngineFile(
@@ -300,6 +334,7 @@ class VersionManagerDialog(QDialog):
         self._file_table.setSelectionBehavior(QTableWidget.SelectRows)
         self._file_table.setSelectionMode(QTableWidget.SingleSelection)
         self._file_table.setMinimumHeight(120)
+        self._file_table.currentCellChanged.connect(self._on_file_table_selection_changed)
         layout.addWidget(self._file_table, 1)
 
         file_btn_row = QHBoxLayout()
@@ -399,6 +434,13 @@ class VersionManagerDialog(QDialog):
         self._delete_btn.setEnabled(True)
         self._file_add_btn.setEnabled(True)
         self._file_remove_btn.setEnabled(False)
+
+    def _on_file_table_selection_changed(self, row: int, column: int, prev_row: int, prev_column: int):
+        """Enable the Remove button when a file row is selected."""
+        has_selection = row >= 0
+        version_row = self._version_list.currentRow()
+        has_version = 0 <= version_row < len(self._versions)
+        self._file_remove_btn.setEnabled(has_version and has_selection)
 
     def _clear_details(self):
         self._ver_name.clear()
