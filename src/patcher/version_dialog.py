@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from models import EngineInfo, EngineFile
 from patcher.version_io import read_info, write_info, create_version, delete_version, discover_versions
+from registry_helper import discover_ue_installations
 from theme import C_ACCENT, C_ACCENT_GREEN, C_ACCENT_RED, C_TEXT_DIM, C_TEXT_BRIGHT, C_BORDER, C_BG, C_SURFACE2
 
 
@@ -395,9 +396,11 @@ class VersionManagerDialog(QDialog):
         det_grid.addWidget(self._ver_name, 0, 1)
 
         det_grid.addWidget(QLabel("Original Engine:"), 1, 0)
-        self._orig_engine_path = QLineEdit()
-        self._orig_engine_path.setPlaceholderText("Path to the original UE installation these files came from...")
-        det_grid.addWidget(self._orig_engine_path, 1, 1)
+        self._orig_engine_combo = QComboBox()
+        self._orig_engine_combo.setStyleSheet(_COMBO_QSS)
+        self._orig_engine_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._orig_engine_combo.currentIndexChanged.connect(self._on_orig_engine_selected)
+        det_grid.addWidget(self._orig_engine_combo, 1, 1)
         self._orig_engine_browse = QPushButton("Browse\u2026")
         self._orig_engine_browse.clicked.connect(self._on_browse_orig_engine)
         det_grid.addWidget(self._orig_engine_browse, 1, 2)
@@ -511,7 +514,25 @@ class VersionManagerDialog(QDialog):
 
         version = self._versions[row]
         self._ver_name.setText(version.engine_version)
-        self._orig_engine_path.setText(version.unreal_dir)
+
+        # Populate original engine combo with discovered UE paths + select current
+        self._orig_engine_combo.blockSignals(True)
+        self._orig_engine_combo.clear()
+        self._orig_engine_combo.addItem("(none)", "")
+        self._populate_ue_paths(self._orig_engine_combo)
+        if version.unreal_dir:
+            norm = os.path.normpath(version.unreal_dir).lower()
+            for i in range(self._orig_engine_combo.count()):
+                stored = self._orig_engine_combo.itemData(i, Qt.UserRole)
+                if stored and os.path.normpath(stored).lower() == norm:
+                    self._orig_engine_combo.setCurrentIndex(i)
+                    break
+            else:
+                self._orig_engine_combo.addItem(version.unreal_dir)
+                idx = self._orig_engine_combo.count() - 1
+                self._orig_engine_combo.setItemData(idx, version.unreal_dir, Qt.UserRole)
+                self._orig_engine_combo.setCurrentIndex(idx)
+        self._orig_engine_combo.blockSignals(False)
 
         # Rebuild parent combo excluding this version (no self-reference)
         self._parent_combo.blockSignals(True)
@@ -543,7 +564,10 @@ class VersionManagerDialog(QDialog):
 
     def _clear_details(self):
         self._ver_name.clear()
-        self._orig_engine_path.clear()
+        self._orig_engine_combo.blockSignals(True)
+        self._orig_engine_combo.clear()
+        self._orig_engine_combo.addItem("(none)", "")
+        self._orig_engine_combo.blockSignals(False)
         self._parent_combo.setCurrentIndex(0)
         self._changelog.clear()
         self._file_table.setRowCount(0)
@@ -636,10 +660,38 @@ class VersionManagerDialog(QDialog):
             QMessageBox.warning(self, "Error", f"Failed to delete version: {e}")
 
     def _on_browse_orig_engine(self):
-        """Browse for the original UE installation directory."""
+        """Browse for the original UE installation directory (combo-style like main window)."""
         path = QFileDialog.getExistingDirectory(self, "Select Original Unreal Engine Installation")
-        if path:
-            self._orig_engine_path.setText(path)
+        if not path:
+            return
+
+        norm_path = os.path.normpath(path).lower()
+        for i in range(self._orig_engine_combo.count()):
+            stored = self._orig_engine_combo.itemData(i, Qt.UserRole)
+            if stored and os.path.normpath(stored).lower() == norm_path:
+                self._orig_engine_combo.setCurrentIndex(i)
+                return
+
+        self._orig_engine_combo.addItem(path)
+        idx = self._orig_engine_combo.count() - 1
+        self._orig_engine_combo.setItemData(idx, path, Qt.UserRole)
+        self._orig_engine_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._orig_engine_combo.setCurrentIndex(idx)
+
+    def _on_orig_engine_selected(self, index: int):
+        """Called when a path is chosen from the combo."""
+        if index < 0:
+            return
+
+    @staticmethod
+    def _populate_ue_paths(combo: QComboBox):
+        """Fill a combo with auto-detected UE installation paths."""
+        paths = discover_ue_installations()
+        for p in paths:
+            combo.addItem(p)
+            idx = combo.count() - 1
+            combo.setItemData(idx, p, Qt.UserRole)
+            combo.setItemData(idx, p, Qt.ToolTipRole)
 
     # ── File entry management ──
 
@@ -730,7 +782,10 @@ class VersionManagerDialog(QDialog):
             row = self._version_list.currentRow()
             if row >= 0 and row < len(self._versions) and self._versions[row] is version:
                 version.engine_version = self._ver_name.text().strip()
-                version.unreal_dir = os.path.normpath(self._orig_engine_path.text().strip())
+                # Read original engine path from combo user data
+                idx = self._orig_engine_combo.currentIndex()
+                combo_path = self._orig_engine_combo.itemData(idx, Qt.UserRole) or ""
+                version.unreal_dir = os.path.normpath(combo_path) if combo_path else ""
                 version.parent_version = self._parent_combo.currentData() or ""
                 version.changelog = self._changelog.toPlainText().strip()
 
