@@ -327,11 +327,11 @@ _COMBO_QSS = (
 
 
 class VersionManagerDialog(QDialog):
-    """Dialog for creating, editing, and deleting engine versions and their file entries."""
+    """Dialog for creating, editing, and deleting patches (engine versions) and their file entries."""
 
     def __init__(self, parent=None, versions_root: str = ""):
         super().__init__(parent)
-        self.setWindowTitle("Version Manager")
+        self.setWindowTitle("Patch Manager")
         self.setMinimumSize(800, 560)
         self.resize(900, 620)
 
@@ -347,15 +347,15 @@ class VersionManagerDialog(QDialog):
         layout.setContentsMargins(12, 8, 12, 12)
         layout.setSpacing(8)
 
-        # ── Top: version list (left) + details (right) ──
+        # ── Top: patch list (left) + details (right) ──
         top_row = QHBoxLayout()
         top_row.setSpacing(10)
 
-        # Left: version list
+        # Left: patch list
         left_panel = QVBoxLayout()
         left_panel.setSpacing(4)
 
-        left_panel.addWidget(QLabel("Versions"))
+        left_panel.addWidget(QLabel("Patches"))
 
         self._version_list = QListWidget()
         self._version_list.setMinimumWidth(160)
@@ -380,26 +380,29 @@ class VersionManagerDialog(QDialog):
         left_panel.addLayout(list_btn_row)
         top_row.addLayout(left_panel)
 
-        # Right: version details
+        # Right: patch details
         right_panel = QVBoxLayout()
         right_panel.setSpacing(6)
 
-        right_panel.addWidget(QLabel("Version Details"))
+        right_panel.addWidget(QLabel("Patch Details"))
 
         det_grid = QGridLayout()
         det_grid.setSpacing(5)
 
-        det_grid.addWidget(QLabel("Engine Version:"), 0, 0)
+        det_grid.addWidget(QLabel("Patch Name:"), 0, 0)
         self._ver_name = QLineEdit()
         self._ver_name.setPlaceholderText("e.g. v1.0")
         det_grid.addWidget(self._ver_name, 0, 1)
 
-        det_grid.addWidget(QLabel("UE Version:"), 1, 0)
-        self._ue_ver = QLineEdit()
-        self._ue_ver.setPlaceholderText("e.g. 5.4")
-        det_grid.addWidget(self._ue_ver, 1, 1)
+        det_grid.addWidget(QLabel("Original Engine:"), 1, 0)
+        self._orig_engine_path = QLineEdit()
+        self._orig_engine_path.setPlaceholderText("Path to the original UE installation these files came from...")
+        det_grid.addWidget(self._orig_engine_path, 1, 1)
+        self._orig_engine_browse = QPushButton("Browse\u2026")
+        self._orig_engine_browse.clicked.connect(self._on_browse_orig_engine)
+        det_grid.addWidget(self._orig_engine_browse, 1, 2)
 
-        det_grid.addWidget(QLabel("Parent:"), 2, 0)
+        det_grid.addWidget(QLabel("Parent Patch:"), 2, 0)
         self._parent_combo = QComboBox()
         self._parent_combo.setStyleSheet(_COMBO_QSS)
         self._parent_combo.addItem("(none)", "")
@@ -407,7 +410,7 @@ class VersionManagerDialog(QDialog):
 
         det_grid.addWidget(QLabel("Changelog:"), 3, 0, Qt.AlignTop)
         self._changelog = QPlainTextEdit()
-        self._changelog.setPlaceholderText("Describe what changed in this version...")
+        self._changelog.setPlaceholderText("Describe what changed in this patch...")
         self._changelog.setMinimumHeight(70)
         det_grid.addWidget(self._changelog, 3, 1)
 
@@ -508,7 +511,7 @@ class VersionManagerDialog(QDialog):
 
         version = self._versions[row]
         self._ver_name.setText(version.engine_version)
-        self._ue_ver.setText(version.unreal_version)
+        self._orig_engine_path.setText(version.unreal_dir)
 
         # Rebuild parent combo excluding this version (no self-reference)
         self._parent_combo.blockSignals(True)
@@ -540,7 +543,7 @@ class VersionManagerDialog(QDialog):
 
     def _clear_details(self):
         self._ver_name.clear()
-        self._ue_ver.clear()
+        self._orig_engine_path.clear()
         self._parent_combo.setCurrentIndex(0)
         self._changelog.clear()
         self._file_table.setRowCount(0)
@@ -558,7 +561,7 @@ class VersionManagerDialog(QDialog):
     # ── Version CRUD ──
 
     def _on_new(self):
-        name, ok = self._ask_name("New Version", "Engine version name:")
+        name, ok = self._ask_name("New Patch", "Patch name:")
         if not ok or not name.strip():
             return
 
@@ -581,7 +584,7 @@ class VersionManagerDialog(QDialog):
             return
         source = self._versions[row]
 
-        name, ok = self._ask_name("Clone Version", f"New name (cloned from {source.engine_version}):")
+        name, ok = self._ask_name("Clone Patch", f"New name (cloned from {source.engine_version}):")
         if not ok or not name.strip():
             return
 
@@ -615,8 +618,8 @@ class VersionManagerDialog(QDialog):
         version = self._versions[row]
 
         reply = QMessageBox.question(
-            self, "Delete Version",
-            f"Delete version '{version.engine_version}' and ALL its files?\n"
+            self, "Delete Patch",
+            f"Delete patch '{version.engine_version}' and ALL its files?\n"
             f"Location: {os.path.dirname(version.info_dir)}\n\n"
             "This cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
@@ -631,6 +634,12 @@ class VersionManagerDialog(QDialog):
             self._refresh_list()
         except (FileNotFoundError, OSError) as e:
             QMessageBox.warning(self, "Error", f"Failed to delete version: {e}")
+
+    def _on_browse_orig_engine(self):
+        """Browse for the original UE installation directory."""
+        path = QFileDialog.getExistingDirectory(self, "Select Original Unreal Engine Installation")
+        if path:
+            self._orig_engine_path.setText(path)
 
     # ── File entry management ──
 
@@ -648,12 +657,19 @@ class VersionManagerDialog(QDialog):
         entries = dlg.get_entries()
         copied_paths = dlg.get_copied_paths()
 
+        original_engine_dir = version.unreal_dir
+        if original_engine_dir and not os.path.isdir(original_engine_dir):
+            original_engine_dir = None  # Invalid path — skip original copies
+
         for i, entry in enumerate(entries):
             version.files.append(entry)
 
-            # Copy browsed files into the version directory (if from outside)
+            # Copy browsed custom files into the version directory
             abs_path = copied_paths[i] if i < len(copied_paths) else ""
-            if abs_path and not abs_path.startswith(ver_dir):
+            # Only copy files picked by user (not auto-discovered [bin]/[int] tags)
+            is_user_picked = bool(abs_path) and os.path.isfile(abs_path)
+
+            if is_user_picked and not abs_path.startswith(ver_dir):
                 rel = entry.path_custom
                 if os.path.isabs(rel):
                     rel = os.path.basename(rel)
@@ -667,7 +683,27 @@ class VersionManagerDialog(QDialog):
                     shutil.copy2(abs_path, dest)
                 except OSError as e:
                     QMessageBox.warning(self, "Warning",
-                                        f"Could not copy file to version directory:\n{e}")
+                                        f"Could not copy custom file to version directory:\n{e}")
+
+            # Also copy the ORIGINAL file from the original engine directory
+            if original_engine_dir and is_user_picked:
+                target_rel = entry.path_target.lstrip("\\/")
+                original_source = os.path.join(original_engine_dir, target_rel)
+                if os.path.isfile(original_source):
+                    backup_rel = os.path.join("_originals", target_rel).replace("\\", "/")
+                    backup_dest = os.path.normpath(os.path.join(ver_dir, backup_rel))
+                    backup_dir = os.path.dirname(backup_dest)
+                    if backup_dir and not os.path.isdir(backup_dir):
+                        os.makedirs(backup_dir, exist_ok=True)
+                    try:
+                        if os.path.isfile(backup_dest):
+                            os.chmod(backup_dest, os.stat(backup_dest).st_mode | 0o200)
+                        shutil.copy2(original_source, backup_dest)
+                        os.chmod(backup_dest, os.stat(backup_dest).st_mode & ~0o222)
+                        entry.path_default = backup_rel
+                    except OSError as e:
+                        QMessageBox.warning(self, "Warning",
+                                            f"Could not copy original file from engine:\n{e}")
 
         self._dirty = True
         self._populate_file_table(version.files)
@@ -694,7 +730,7 @@ class VersionManagerDialog(QDialog):
             row = self._version_list.currentRow()
             if row >= 0 and row < len(self._versions) and self._versions[row] is version:
                 version.engine_version = self._ver_name.text().strip()
-                version.unreal_version = self._ue_ver.text().strip()
+                version.unreal_dir = os.path.normpath(self._orig_engine_path.text().strip())
                 version.parent_version = self._parent_combo.currentData() or ""
                 version.changelog = self._changelog.toPlainText().strip()
 
@@ -707,7 +743,7 @@ class VersionManagerDialog(QDialog):
         self._dirty = False
         self._refresh_list()
         QMessageBox.information(self, "Saved",
-                                f"{len(self._versions)} version(s) saved.")
+                                f"{len(self._versions)} patch(es) saved.")
 
     def _on_close(self):
         if self._dirty:

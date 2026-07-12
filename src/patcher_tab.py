@@ -77,22 +77,22 @@ class PatcherTab(QWidget):
 
         layout.addLayout(folder_row)
 
-        # ── Section 2: Version selector + applied indicator ──
-        version_row = QHBoxLayout()
+        # ── Section 2: Patch selector + applied indicator ──
+        patch_row = QHBoxLayout()
 
-        ver_label = QLabel("Engine Version:")
-        version_row.addWidget(ver_label)
+        patch_label = QLabel("Patch:")
+        patch_row.addWidget(patch_label)
 
         self._version_picker = QComboBox()
         self._version_picker.setMinimumWidth(200)
         self._version_picker.currentIndexChanged.connect(self._on_version_selected)
-        version_row.addWidget(self._version_picker, 1)
+        patch_row.addWidget(self._version_picker, 1)
 
         self._version_count_label = QLabel("")
         self._version_count_label.setAlignment(Qt.AlignRight)
-        version_row.addWidget(self._version_count_label)
+        patch_row.addWidget(self._version_count_label)
 
-        layout.addLayout(version_row)
+        layout.addLayout(patch_row)
 
         # Applied version indicator
         self._applied_version_label = QLabel("")
@@ -264,13 +264,13 @@ class PatcherTab(QWidget):
                     self._version_picker.addItem(f"{v.engine_version}  (UE {v.unreal_version})")
                 self._version_picker.setCurrentIndex(len(self._versions) - 1)
                 self._on_version_selected(len(self._versions) - 1)
-                self._version_count_label.setText(f"{len(self._versions)} version(s) available")
+                self._version_count_label.setText(f"{len(self._versions)} patch(es) available")
             else:
-                self._version_count_label.setText("No versions found")
+                self._version_count_label.setText("No patches found")
                 self._changelog.setPlainText(
-                    "No engine versions discovered.\n\n"
-                    f"Place version folders under:\n{self._versions_root}\n\n"
-                    "Each folder should contain an info.dat file with version data."
+                    "No patches discovered.\n\n"
+                    f"Place patch folders under:\n{self._versions_root}\n\n"
+                    "Each folder should contain an info.dat file with patch data."
                 )
 
             self._update_apply_buttons()
