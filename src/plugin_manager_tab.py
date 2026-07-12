@@ -48,7 +48,7 @@ class SortableTreeItem(QTreeWidgetItem):
         if col == 0:
             a, b = self.checkState(col).value, other.checkState(col).value
             if a != b:
-                return b < a  # descending: checked (2) before unchecked (0)
+                return a < b  # ascending: unchecked (0) before checked (2)
             # Same checkbox state — secondary sort by name
             return self.text(self.COL_NAME).lower() < other.text(self.COL_NAME).lower()
         return self.text(col).lower() < other.text(col).lower()
@@ -207,7 +207,7 @@ class PluginManagerTab(QWidget):
         # Columns: Enabled sizes to content, description fills remaining space
         header = self._tree.header()
         header.setStretchLastSection(False)
-        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
+        header.setSortIndicator(self.COL_ENABLED, Qt.AscendingOrder)
         header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
         header.resizeSection(self.COL_NAME, 220)
