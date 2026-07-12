@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
 
         # Tab container
         self._tabs = QTabWidget()
-        self._tabs.setTabPosition(QTabWidget.North)
+        self._tabs.setTabPosition(QTabWidget.TabPosition.North)
         self._tabs.setDocumentMode(True)
         self._tabs.setMovable(False)
 

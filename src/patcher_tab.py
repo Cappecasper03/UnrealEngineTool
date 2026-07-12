@@ -105,7 +105,7 @@ class PatcherTab(QWidget):
         folder_row = QHBoxLayout()
         folder_row.setSpacing(6)
         self._ue_folder_combo = QComboBox()
-        self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._ue_folder_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._ue_folder_combo.setStyleSheet(self._COMBO_QSS)
         self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
         folder_row.addWidget(self._ue_folder_combo)
@@ -142,7 +142,7 @@ class PatcherTab(QWidget):
         patch_row.addWidget(self._manage_btn)
 
         self._version_count_label = QLabel("")
-        self._version_count_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._version_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._version_count_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; background: transparent;")
         patch_row.addWidget(self._version_count_label)
 
@@ -150,7 +150,7 @@ class PatcherTab(QWidget):
 
         # Applied version indicator
         self._applied_version_label = QLabel("")
-        self._applied_version_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._applied_version_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._applied_version_label.setStyleSheet("background: transparent; font-size: 12px;")
         c2.addWidget(self._applied_version_label)
 
@@ -197,13 +197,13 @@ class PatcherTab(QWidget):
 
         self._apply_custom_btn = QPushButton("Apply Custom Engine")
         self._apply_custom_btn.setProperty("class", "primary")
-        self._apply_custom_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._apply_custom_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._apply_custom_btn.setMinimumWidth(180)
         self._apply_custom_btn.clicked.connect(lambda: self._on_apply(True))
         action_row.addWidget(self._apply_custom_btn)
 
         self._apply_default_btn = QPushButton("Revert to Default")
-        self._apply_default_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._apply_default_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._apply_default_btn.setMinimumWidth(160)
         self._apply_default_btn.clicked.connect(lambda: self._on_apply(False))
         action_row.addWidget(self._apply_default_btn)
@@ -237,8 +237,8 @@ class PatcherTab(QWidget):
         for p in paths:
             self._ue_folder_combo.addItem(p)
             idx = self._ue_folder_combo.count() - 1
-            self._ue_folder_combo.setItemData(idx, p, Qt.UserRole)
-            self._ue_folder_combo.setItemData(idx, p, Qt.ToolTipRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.UserRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.ToolTipRole)
 
         self._ue_folder_combo.blockSignals(False)
 
@@ -251,7 +251,7 @@ class PatcherTab(QWidget):
         if index < 0:
             return
         text = self._ue_folder_combo.currentText().strip()
-        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or text
+        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.ItemDataRole.UserRole) or text
         self._on_ue_dir_changed()
 
     def _on_browse(self):
@@ -262,15 +262,15 @@ class PatcherTab(QWidget):
         # Normalise and check if already in combo
         norm = os.path.normpath(path).lower()
         for i in range(self._ue_folder_combo.count()):
-            stored = self._ue_folder_combo.itemData(i, Qt.UserRole)
+            stored = self._ue_folder_combo.itemData(i, Qt.ItemDataRole.UserRole)
             if stored and os.path.normpath(stored).lower() == norm:
                 self._ue_folder_combo.setCurrentIndex(i)
                 return
 
         self._ue_folder_combo.addItem(path)
         idx = self._ue_folder_combo.count() - 1
-        self._ue_folder_combo.setItemData(idx, path, Qt.UserRole)
-        self._ue_folder_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ItemDataRole.UserRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ItemDataRole.ToolTipRole)
         self._ue_folder_combo.setCurrentIndex(idx)
 
     def _on_ue_dir_changed(self):
@@ -392,9 +392,9 @@ class PatcherTab(QWidget):
             self,
             "Apply Custom Engine?" if custom_engine else "Revert to Default?",
             msg,
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         self._do_apply(custom_engine, version, ue_dir)

@@ -53,7 +53,7 @@ class SortableTreeItem(QTreeWidgetItem):
             # Same checkbox state — name a-z regardless of sort direction
             n1, n2 = self.text(self.COL_NAME).lower(), other.text(self.COL_NAME).lower()
             order = tw.header().sortIndicatorOrder()
-            if order == Qt.DescendingOrder:
+            if order == Qt.SortOrder.DescendingOrder:
                 return n2 < n1  # reversed so Qt's negation turns it back to a-z
             return n1 < n2      # ascending: a-z directly
         return self.text(col).lower() < other.text(col).lower()
@@ -148,7 +148,7 @@ class PluginManagerTab(QWidget):
         folder_row.setSpacing(6)
 
         self._ue_folder_combo = QComboBox()
-        self._ue_folder_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._ue_folder_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._ue_folder_combo.setStyleSheet(self._COMBO_QSS)
         self._ue_folder_combo.currentIndexChanged.connect(self._on_folder_selected)
         folder_row.addWidget(self._ue_folder_combo)
@@ -269,7 +269,7 @@ class PluginManagerTab(QWidget):
         self._tree.setHeaderLabels(["Enabled", "Name", "Category", "Description"])
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
-        self._tree.setSelectionMode(QTreeWidget.NoSelection)
+        self._tree.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)
         self._tree.setAnimated(True)
         self._tree.setSortingEnabled(True)
         self._tree.itemChanged.connect(self._on_item_changed)
@@ -277,9 +277,9 @@ class PluginManagerTab(QWidget):
         # Columns: Enabled sizes to content, description fills remaining space
         header = self._tree.header()
         header.setStretchLastSection(False)
-        header.setSortIndicator(self.COL_ENABLED, Qt.DescendingOrder)
-        header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.Stretch)
+        header.setSortIndicator(self.COL_ENABLED, Qt.SortOrder.DescendingOrder)
+        header.setSectionResizeMode(self.COL_ENABLED, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_DESCRIPTION, QHeaderView.ResizeMode.Stretch)
         header.resizeSection(self.COL_NAME, 220)
         header.resizeSection(self.COL_CATEGORY, 150)
 
@@ -291,7 +291,7 @@ class PluginManagerTab(QWidget):
         # Stats bar (below the cards, no card wrapper)
         # ════════════════════════════════════════════
         self._stats_label = QLabel("")
-        self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._stats_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._stats_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; padding: 2px 4px; background: transparent;")
         layout.addWidget(self._stats_label)
 
@@ -350,8 +350,8 @@ class PluginManagerTab(QWidget):
         for p in paths:
             self._ue_folder_combo.addItem(p)
             idx = self._ue_folder_combo.count() - 1
-            self._ue_folder_combo.setItemData(idx, p, Qt.UserRole)
-            self._ue_folder_combo.setItemData(idx, p, Qt.ToolTipRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.UserRole)
+            self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.ToolTipRole)
 
         self._ue_folder_combo.blockSignals(False)
 
@@ -365,7 +365,7 @@ class PluginManagerTab(QWidget):
     def _on_folder_selected(self, index: int):
         if index < 0:
             return
-        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.UserRole) or self._ue_folder_combo.currentText()
+        self._current_ue_root = self._ue_folder_combo.itemData(index, Qt.ItemDataRole.UserRole) or self._ue_folder_combo.currentText()
         self._start_scan()
 
     def _on_browse(self):
@@ -376,15 +376,15 @@ class PluginManagerTab(QWidget):
         # Check if already in combo (match on stored path)
         norm_path = os.path.normpath(path).lower()
         for i in range(self._ue_folder_combo.count()):
-            stored = self._ue_folder_combo.itemData(i, Qt.UserRole)
+            stored = self._ue_folder_combo.itemData(i, Qt.ItemDataRole.UserRole)
             if stored and os.path.normpath(stored).lower() == norm_path:
                 self._ue_folder_combo.setCurrentIndex(i)
                 return
 
         self._ue_folder_combo.addItem(path)
         idx = self._ue_folder_combo.count() - 1
-        self._ue_folder_combo.setItemData(idx, path, Qt.UserRole)
-        self._ue_folder_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ItemDataRole.UserRole)
+        self._ue_folder_combo.setItemData(idx, path, Qt.ItemDataRole.ToolTipRole)
         self._ue_folder_combo.setCurrentIndex(idx)
 
     def _start_scan(self):
@@ -497,8 +497,8 @@ class PluginManagerTab(QWidget):
             item = SortableTreeItem()
 
             # Native tree-item checkboxes — reliable with sorting enabled
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(self.COL_ENABLED, Qt.Checked if plugin.enabled_by_default else Qt.Unchecked)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(self.COL_ENABLED, Qt.CheckState.Checked if plugin.enabled_by_default else Qt.CheckState.Unchecked)
 
             item.setText(self.COL_NAME, plugin.name)
             item.setToolTip(self.COL_NAME, plugin.friendly_name)
@@ -507,7 +507,7 @@ class PluginManagerTab(QWidget):
             item.setText(self.COL_DESCRIPTION, plugin.description)
 
             # Store reference so itemChanged handler can find the PluginData
-            item.setData(0, Qt.UserRole, id(plugin))
+            item.setData(0, Qt.ItemDataRole.UserRole, id(plugin))
             self._item_plugins[id(plugin)] = plugin
 
             self._tree.addTopLevelItem(item)
@@ -518,11 +518,11 @@ class PluginManagerTab(QWidget):
     def _on_item_changed(self, item: QTreeWidgetItem, column: int):
         if column != self.COL_ENABLED:
             return
-        plugin_id = item.data(0, Qt.UserRole)
+        plugin_id = item.data(0, Qt.ItemDataRole.UserRole)
         plugin = self._item_plugins.get(plugin_id)
         if plugin is None:
             return
-        checked = item.checkState(self.COL_ENABLED) == Qt.Checked
+        checked = item.checkState(self.COL_ENABLED) == Qt.CheckState.Checked
         plugin.enabled_by_default = checked
         self._update_stats()
 

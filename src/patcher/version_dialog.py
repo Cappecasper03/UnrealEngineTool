@@ -466,7 +466,7 @@ class VersionManagerDialog(QDialog):
         orig_combo_row.setSpacing(4)
         self._orig_engine_combo = QComboBox()
         self._orig_engine_combo.setStyleSheet(_COMBO_QSS)
-        self._orig_engine_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._orig_engine_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._orig_engine_combo.currentIndexChanged.connect(self._on_orig_engine_selected)
         orig_combo_row.addWidget(self._orig_engine_combo)
 
@@ -490,7 +490,7 @@ class VersionManagerDialog(QDialog):
         # Changelog
         changelog_label = QLabel("Changelog:")
         changelog_label.setStyleSheet("background: transparent;")
-        changelog_label.setAlignment(Qt.AlignTop)
+        changelog_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         det_grid.addWidget(changelog_label, 3, 0)
 
         self._changelog = QPlainTextEdit()
@@ -514,11 +514,11 @@ class VersionManagerDialog(QDialog):
         self._file_table = QTableWidget(0, 2)
         self._file_table.setHorizontalHeaderLabels(["#", "Engine Path"])
         self._file_table.horizontalHeader().setStretchLastSection(True)
-        self._file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self._file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self._file_table.horizontalHeader().resizeSection(0, 30)
         self._file_table.verticalHeader().setVisible(False)
-        self._file_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self._file_table.setSelectionMode(QTableWidget.SingleSelection)
+        self._file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._file_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._file_table.setMinimumHeight(100)
         self._file_table.currentCellChanged.connect(self._on_file_table_selection_changed)
         fc.addWidget(self._file_table, 1)
@@ -631,14 +631,14 @@ class VersionManagerDialog(QDialog):
         if version.unreal_dir:
             norm = os.path.normpath(version.unreal_dir).lower()
             for i in range(self._orig_engine_combo.count()):
-                stored = self._orig_engine_combo.itemData(i, Qt.UserRole)
+                stored = self._orig_engine_combo.itemData(i, Qt.ItemDataRole.UserRole)
                 if stored and os.path.normpath(stored).lower() == norm:
                     self._orig_engine_combo.setCurrentIndex(i)
                     break
             else:
                 self._orig_engine_combo.addItem(version.unreal_dir)
                 idx = self._orig_engine_combo.count() - 1
-                self._orig_engine_combo.setItemData(idx, version.unreal_dir, Qt.UserRole)
+                self._orig_engine_combo.setItemData(idx, version.unreal_dir, Qt.ItemDataRole.UserRole)
                 self._orig_engine_combo.setCurrentIndex(idx)
         self._orig_engine_combo.blockSignals(False)
 
@@ -688,7 +688,7 @@ class VersionManagerDialog(QDialog):
             self._file_table.setItem(i, 1, QTableWidgetItem(engine_path))
             item = self._file_table.item(i, 1)
             if item:
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
     # ── Version CRUD ──
 
@@ -754,9 +754,9 @@ class VersionManagerDialog(QDialog):
             f"Delete patch '{version.engine_version}' and ALL its files?\n"
             f"Location: {os.path.dirname(version.info_dir)}\n\n"
             "This cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         try:
@@ -775,15 +775,15 @@ class VersionManagerDialog(QDialog):
 
         norm_path = os.path.normpath(path).lower()
         for i in range(self._orig_engine_combo.count()):
-            stored = self._orig_engine_combo.itemData(i, Qt.UserRole)
+            stored = self._orig_engine_combo.itemData(i, Qt.ItemDataRole.UserRole)
             if stored and os.path.normpath(stored).lower() == norm_path:
                 self._orig_engine_combo.setCurrentIndex(i)
                 return
 
         self._orig_engine_combo.addItem(path)
         idx = self._orig_engine_combo.count() - 1
-        self._orig_engine_combo.setItemData(idx, path, Qt.UserRole)
-        self._orig_engine_combo.setItemData(idx, path, Qt.ToolTipRole)
+        self._orig_engine_combo.setItemData(idx, path, Qt.ItemDataRole.UserRole)
+        self._orig_engine_combo.setItemData(idx, path, Qt.ItemDataRole.ToolTipRole)
         self._orig_engine_combo.setCurrentIndex(idx)
 
     def _on_orig_engine_selected(self, index: int):
@@ -799,7 +799,7 @@ class VersionManagerDialog(QDialog):
         idx = self._orig_engine_combo.currentIndex()
         if idx < 0:
             return False
-        path = self._orig_engine_combo.itemData(idx, Qt.UserRole) or ""
+        path = self._orig_engine_combo.itemData(idx, Qt.ItemDataRole.UserRole) or ""
         return bool(path) and os.path.isdir(path)
 
     @staticmethod
@@ -809,8 +809,8 @@ class VersionManagerDialog(QDialog):
         for p in paths:
             combo.addItem(p)
             idx = combo.count() - 1
-            combo.setItemData(idx, p, Qt.UserRole)
-            combo.setItemData(idx, p, Qt.ToolTipRole)
+            combo.setItemData(idx, p, Qt.ItemDataRole.UserRole)
+            combo.setItemData(idx, p, Qt.ItemDataRole.ToolTipRole)
 
     # ── File entry management ──
 
@@ -822,7 +822,7 @@ class VersionManagerDialog(QDialog):
         ver_dir = os.path.normpath(os.path.dirname(version.info_dir))
 
         dlg = FileEntryDialog(self, version_dir=ver_dir)
-        if dlg.exec() != QDialog.Accepted:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         entries = dlg.get_entries()
@@ -913,7 +913,7 @@ class VersionManagerDialog(QDialog):
                 version.engine_version = self._ver_name.text().strip()
                 # Read original engine path from combo user data
                 idx = self._orig_engine_combo.currentIndex()
-                combo_path = self._orig_engine_combo.itemData(idx, Qt.UserRole) or ""
+                combo_path = self._orig_engine_combo.itemData(idx, Qt.ItemDataRole.UserRole) or ""
                 version.unreal_dir = os.path.normpath(combo_path) if combo_path else ""
                 version.parent_version = self._parent_combo.currentData() or ""
                 version.changelog = self._changelog.toPlainText().strip()
@@ -934,11 +934,11 @@ class VersionManagerDialog(QDialog):
             reply = QMessageBox.question(
                 self, "Unsaved Changes",
                 "You have unsaved changes. Save before closing?",
-                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
             )
-            if reply == QMessageBox.Save:
+            if reply == QMessageBox.StandardButton.Save:
                 self._on_save_all()
-            elif reply == QMessageBox.Cancel:
+            elif reply == QMessageBox.StandardButton.Cancel:
                 return
         self.accept()
 
@@ -950,8 +950,8 @@ class VersionManagerDialog(QDialog):
         dlg = QInputDialog(self)
         dlg.setWindowTitle(title)
         dlg.setLabelText(prompt)
-        dlg.setInputMode(QInputDialog.TextInput)
-        ok = dlg.exec() == QDialog.Accepted
+        dlg.setInputMode(QInputDialog.InputMode.TextInput)
+        ok = dlg.exec() == QDialog.DialogCode.Accepted
         return dlg.textValue(), ok
 
     def versions_changed(self) -> bool:
