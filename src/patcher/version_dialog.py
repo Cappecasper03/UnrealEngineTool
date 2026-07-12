@@ -17,63 +17,98 @@ from patcher.version_io import read_info, write_info, create_version, delete_ver
 from theme import C_ACCENT, C_ACCENT_GREEN, C_ACCENT_RED, C_TEXT_DIM, C_TEXT_BRIGHT, C_BORDER, C_BG, C_SURFACE2
 
 
-# ── File Entry Edit Sub-Dialog ──
+# ── File Entry Adder (multi-file selection + auto binary detection) ──
+
+def _relativise(path: str, version_dir: str = "") -> str:
+    """Convert an absolute file path to an engine-relative path."""
+    if version_dir and path.startswith(version_dir):
+        return os.path.relpath(path, version_dir).replace("\\", "/")
+    norm = path.replace("\\", "/")
+    idx = norm.lower().find("/engine/")
+    if idx >= 0:
+        return norm[idx + 1:]
+    return os.path.basename(path)
+
+
+def _find_engine_root(path: str) -> str:
+    """Walk up from a file path to find the UE installation root (parent of Engine/)."""
+    norm = os.path.normpath(path).replace("\\", "/")
+    idx = norm.lower().find("/engine/")
+    if idx < 0:
+        return ""
+    return norm[:idx]  # Everything before /Engine/
+
+
+def _discover_binaries(ue_root: str) -> List[tuple]:
+    """Scan Engine/Binaries/Win64 for .dll, .exe, .pdb files.
+    Returns list of (relative_path, abs_path) tuples."""
+    bin_dir = os.path.join(ue_root, "Engine", "Binaries", "Win64")
+    if not os.path.isdir(bin_dir):
+        return []
+    results = []
+    for fn in sorted(os.listdir(bin_dir)):
+        ext = os.path.splitext(fn)[1].lower()
+        if ext in {".dll", ".exe", ".pdb"}:
+            rel = f"Engine/Binaries/Win64/{fn}"
+            results.append((rel, os.path.join(bin_dir, fn)))
+    return results
+
 
 class FileEntryDialog(QDialog):
-    """Dialog for adding or editing a single EngineFile entry."""
+    """Dialog for selecting one or more files and returning EngineFile entries.
 
-    def __init__(self, parent=None, entry: Optional[EngineFile] = None,
-                 version_dir: str = ""):
+    Each selected file gets its engine-relative path auto-extracted.
+    If files come from a recognised UE installation, binaries from
+    Engine/Binaries/Win64 are auto-discovered and included.
+    """
+
+    def __init__(self, parent=None, version_dir: str = ""):
         super().__init__(parent)
-        self.setWindowTitle("File Entry" if not entry else "Edit File Entry")
+        self.setWindowTitle("Add Files")
         self.setMinimumWidth(520)
+        self.setMinimumHeight(350)
+        self.resize(560, 420)
         self._version_dir = version_dir
-        self._custom_abs = ""  # Absolute path the user picked (for copy into version dir)
+        self._entries: List[EngineFile] = []  # Populated after OK
+        self._copied_abs: List[str] = []      # Absolute paths of files to copy in
 
         self._build_ui()
 
-        if entry:
-            self._custom_path.setText(entry.path_custom)
-            self._default_path.setText(entry.path_default)
-            self._target_path.setText(entry.path_target)
-
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
-        grid = QGridLayout()
-        grid.setSpacing(6)
+        # Instructions
+        layout.addWidget(QLabel("Select one or more files to add as patch entries."))
+        layout.addWidget(QLabel("Binaries from Engine/Binaries/Win64/ are auto-included."))
 
-        grid.addWidget(QLabel("Custom File:"), 0, 0)
-        self._custom_path = QLineEdit()
-        self._custom_path.setPlaceholderText("Relative path in version directory (e.g. Engine/Src/foo.h)")
-        grid.addWidget(self._custom_path, 0, 1)
-        self._custom_btn = QPushButton("Browse\u2026")
-        self._custom_btn.clicked.connect(self._on_browse_custom)
-        grid.addWidget(self._custom_btn, 0, 2)
+        # Browse button
+        browse_row = QHBoxLayout()
+        self._browse_btn = QPushButton("Browse Files\u2026")
+        self._browse_btn.clicked.connect(self._on_browse)
+        browse_row.addWidget(self._browse_btn)
+        browse_row.addStretch(1)
+        layout.addLayout(browse_row)
 
-        grid.addWidget(QLabel("Default File:"), 1, 0)
-        self._default_path = QLineEdit()
-        self._default_path.setPlaceholderText("Optional default/original file path")
-        grid.addWidget(self._default_path, 1, 1)
-        self._default_btn = QPushButton("Browse\u2026")
-        self._default_btn.clicked.connect(self._on_browse_default)
-        grid.addWidget(self._default_btn, 1, 2)
+        # File list
+        self._file_list = QListWidget()
+        self._file_list.setMinimumHeight(120)
+        self._file_list.setAlternatingRowColors(True)
+        layout.addWidget(self._file_list, 1)
 
-        grid.addWidget(QLabel("Target Path:"), 2, 0)
-        self._target_path = QLineEdit()
-        self._target_path.setPlaceholderText("Path relative to UE root (e.g. Engine/Source/.../foo.h)")
-        grid.addWidget(self._target_path, 2, 1, 1, 2)
-
-        layout.addLayout(grid)
+        # Selected files count / binary info
+        self._info_label = QLabel("")
+        self._info_label.setStyleSheet("color: #808080; font-size: 11px;")
+        layout.addWidget(self._info_label)
 
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
 
-        self._save_btn = QPushButton("OK")
-        self._save_btn.clicked.connect(self._on_save)
-        btn_row.addWidget(self._save_btn)
+        self._add_btn = QPushButton("Add Files")
+        self._add_btn.setEnabled(False)
+        self._add_btn.clicked.connect(self._on_add)
+        btn_row.addWidget(self._add_btn)
 
         self._cancel_btn = QPushButton("Cancel")
         self._cancel_btn.clicked.connect(self.reject)
@@ -81,47 +116,71 @@ class FileEntryDialog(QDialog):
 
         layout.addLayout(btn_row)
 
-    def _on_browse_custom(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Custom File")
-        if path:
-            self._custom_abs = path
-            # If inside version dir, store relative; otherwise just store the abs path
-            if self._version_dir and path.startswith(self._version_dir):
-                rel = os.path.relpath(path, self._version_dir).replace("\\", "/")
-                self._custom_path.setText(rel)
-            else:
-                # Store absolute; user can set relative manually
-                self._custom_path.setText(path)
-
-    def _on_browse_default(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Default File")
-        if path:
-            if self._version_dir and path.startswith(self._version_dir):
-                rel = os.path.relpath(path, self._version_dir).replace("\\", "/")
-                self._default_path.setText(rel)
-            else:
-                self._default_path.setText(path)
-
-    def _on_save(self):
-        if not self._custom_path.text().strip() and not self._default_path.text().strip():
-            QMessageBox.warning(self, "Missing Data", "At least one of Custom or Default file must be set.")
-            return
-        if not self._target_path.text().strip():
-            QMessageBox.warning(self, "Missing Data", "Target path is required.")
-            return
-        self.accept()
-
-    def get_entry(self) -> EngineFile:
-        return EngineFile(
-            path_custom=self._custom_path.text().strip(),
-            path_default=self._default_path.text().strip(),
-            path_target=self._target_path.text().strip(),
-            local_name=os.path.basename(self._custom_path.text().strip() or self._default_path.text().strip()),
+    def _on_browse(self):
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Files to Add as Patch Entries"
         )
+        if not paths:
+            return
 
-    @property
-    def custom_abs_path(self) -> str:
-        return self._custom_abs
+        self._entries.clear()
+        self._copied_abs.clear()
+        self._file_list.clear()
+
+        all_ue_roots = set()
+
+        for path in sorted(paths):
+            self._copied_abs.append(path)
+            rel = _relativise(path, self._version_dir)
+            entry = EngineFile(
+                path_custom=rel,
+                path_default="",
+                path_target=rel,
+                local_name=os.path.basename(rel),
+            )
+            self._entries.append(entry)
+            self._file_list.addItem(rel)
+
+            ue_root = _find_engine_root(path)
+            if ue_root:
+                all_ue_roots.add(ue_root)
+
+        # Auto-discover binaries from any detected UE installation roots
+        binary_count_total = 0
+        for ue_root in all_ue_roots:
+            for rel_path, abs_path in _discover_binaries(ue_root):
+                # Skip duplicates already picked by user
+                if any(e.path_custom == rel_path for e in self._entries):
+                    continue
+                entry = EngineFile(
+                    path_custom=rel_path,
+                    path_default="",
+                    path_target=rel_path,
+                    local_name=os.path.basename(rel_path),
+                )
+                self._entries.append(entry)
+                self._copied_abs.append(abs_path)
+                self._file_list.addItem(f"[binary] {rel_path}")
+                binary_count_total += 1
+
+        info_parts = [f"{len([e for e in self._entries if '[binary]' not in e.path_custom])} file(s) selected"]
+        if binary_count_total > 0:
+            info_parts.append(f"{binary_count_total} binary(ies) auto-discovered")
+        self._info_label.setText("  \u00b7  ".join(info_parts))
+        self._add_btn.setEnabled(len(self._entries) > 0)
+
+    def _on_add(self):
+        if not self._entries:
+            self.reject()
+        else:
+            self.accept()
+
+    def get_entries(self) -> List[EngineFile]:
+        return self._entries
+
+    def get_copied_paths(self) -> List[str]:
+        """Absolute paths of browsed files (for copying into version dir)."""
+        return self._copied_abs
 
 
 # ── Version Manager Dialog ──
@@ -232,8 +291,8 @@ class VersionManagerDialog(QDialog):
         # ── File entries table ──
         layout.addWidget(QLabel("File Entries"))
 
-        self._file_table = QTableWidget(0, 4)
-        self._file_table.setHorizontalHeaderLabels(["#", "Custom Path", "Default Path", "Target Path"])
+        self._file_table = QTableWidget(0, 2)
+        self._file_table.setHorizontalHeaderLabels(["#", "Engine Path"])
         self._file_table.horizontalHeader().setStretchLastSection(True)
         self._file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self._file_table.horizontalHeader().resizeSection(0, 30)
@@ -244,15 +303,10 @@ class VersionManagerDialog(QDialog):
         layout.addWidget(self._file_table, 1)
 
         file_btn_row = QHBoxLayout()
-        self._file_add_btn = QPushButton("Add File\u2026")
+        self._file_add_btn = QPushButton("Add Files\u2026")
         self._file_add_btn.setEnabled(False)
         self._file_add_btn.clicked.connect(self._on_add_file)
         file_btn_row.addWidget(self._file_add_btn)
-
-        self._file_edit_btn = QPushButton("Edit")
-        self._file_edit_btn.setEnabled(False)
-        self._file_edit_btn.clicked.connect(self._on_edit_file)
-        file_btn_row.addWidget(self._file_edit_btn)
 
         self._file_remove_btn = QPushButton("Remove")
         self._file_remove_btn.setEnabled(False)
@@ -318,7 +372,6 @@ class VersionManagerDialog(QDialog):
             self._clone_btn.setEnabled(False)
             self._delete_btn.setEnabled(False)
             self._file_add_btn.setEnabled(False)
-            self._file_edit_btn.setEnabled(False)
             self._file_remove_btn.setEnabled(False)
             return
 
@@ -326,8 +379,17 @@ class VersionManagerDialog(QDialog):
         self._ver_name.setText(version.engine_version)
         self._ue_ver.setText(version.unreal_version)
 
+        # Rebuild parent combo excluding this version (no self-reference)
+        self._parent_combo.blockSignals(True)
+        current_parent = self._parent_combo.currentData()
+        self._parent_combo.clear()
+        self._parent_combo.addItem("(none)", "")
+        for v in self._versions:
+            if v.engine_version != version.engine_version:
+                self._parent_combo.addItem(v.engine_version, v.engine_version)
         idx = self._parent_combo.findData(version.parent_version)
         self._parent_combo.setCurrentIndex(max(idx, 0))
+        self._parent_combo.blockSignals(False)
 
         self._changelog.setPlainText(version.changelog)
 
@@ -336,7 +398,6 @@ class VersionManagerDialog(QDialog):
         self._clone_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
         self._file_add_btn.setEnabled(True)
-        self._file_edit_btn.setEnabled(False)
         self._file_remove_btn.setEnabled(False)
 
     def _clear_details(self):
@@ -349,14 +410,12 @@ class VersionManagerDialog(QDialog):
     def _populate_file_table(self, files: List[EngineFile]):
         self._file_table.setRowCount(len(files))
         for i, f in enumerate(files):
+            engine_path = f.path_custom or f.path_target
             self._file_table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
-            self._file_table.setItem(i, 1, QTableWidgetItem(f.path_custom))
-            self._file_table.setItem(i, 2, QTableWidgetItem(f.path_default))
-            self._file_table.setItem(i, 3, QTableWidgetItem(f.path_target))
-            for c in range(4):
-                item = self._file_table.item(i, c)
-                if item:
-                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            self._file_table.setItem(i, 1, QTableWidgetItem(engine_path))
+            item = self._file_table.item(i, 1)
+            if item:
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
     # ── Version CRUD ──
 
@@ -445,20 +504,24 @@ class VersionManagerDialog(QDialog):
         ver_dir = os.path.dirname(version.info_dir)
 
         dlg = FileEntryDialog(self, version_dir=ver_dir)
-        if dlg.exec() == QDialog.Accepted:
-            entry = dlg.get_entry()
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        entries = dlg.get_entries()
+        copied_paths = dlg.get_copied_paths()
+
+        for i, entry in enumerate(entries):
             version.files.append(entry)
 
-            # Copy custom file into version directory if it was an external absolute path
-            abs_path = dlg.custom_abs_path
+            # Copy browsed files into the version directory (if from outside)
+            abs_path = copied_paths[i] if i < len(copied_paths) else ""
             if abs_path and not abs_path.startswith(ver_dir):
-                # User picked an external file — copy it into the version dir
-                rel_target = entry.path_custom
-                if os.path.isabs(rel_target):
-                    # Use just the filename relative to version dir
-                    rel_target = os.path.basename(rel_target)
-                    entry.path_custom = rel_target
-                dest = os.path.join(ver_dir, rel_target)
+                rel = entry.path_custom
+                if os.path.isabs(rel):
+                    rel = os.path.basename(rel)
+                    entry.path_custom = rel
+                    entry.path_target = rel
+                dest = os.path.join(ver_dir, rel)
                 dest_dir = os.path.dirname(dest)
                 if dest_dir and not os.path.isdir(dest_dir):
                     os.makedirs(dest_dir, exist_ok=True)
@@ -468,24 +531,8 @@ class VersionManagerDialog(QDialog):
                     QMessageBox.warning(self, "Warning",
                                         f"Could not copy file to version directory:\n{e}")
 
-            self._dirty = True
-            self._populate_file_table(version.files)
-
-    def _on_edit_file(self):
-        row = self._version_list.currentRow()
-        if row < 0 or row >= len(self._versions):
-            return
-        version = self._versions[row]
-        sel = self._file_table.currentRow()
-        if sel < 0 or sel >= len(version.files):
-            return
-        ver_dir = os.path.dirname(version.info_dir)
-
-        dlg = FileEntryDialog(self, entry=version.files[sel], version_dir=ver_dir)
-        if dlg.exec() == QDialog.Accepted:
-            version.files[sel] = dlg.get_entry()
-            self._dirty = True
-            self._populate_file_table(version.files)
+        self._dirty = True
+        self._populate_file_table(version.files)
 
     def _on_remove_file(self):
         row = self._version_list.currentRow()

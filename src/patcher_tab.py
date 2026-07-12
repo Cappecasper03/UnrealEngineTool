@@ -45,7 +45,6 @@ class PatcherTab(QWidget):
 
         self._versions: List[EngineInfo] = []
         self._current_ue_root = ""
-        self._source_mode = False
         self._is_working = False
         self._versions_root = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..", "..", "Versions"
@@ -142,22 +141,11 @@ class PatcherTab(QWidget):
 
         action_row.addWidget(self._make_vsep())
 
-        self._source_mode_btn = QPushButton("Engine Mode")
-        self._source_mode_btn.setCheckable(True)
-        self._source_mode_btn.clicked.connect(self._toggle_source_mode)
-        action_row.addWidget(self._source_mode_btn)
-
-        action_row.addWidget(self._make_vsep())
-
         self._manage_btn = QPushButton("Manage")
         self._manage_btn.clicked.connect(self._on_manage_versions)
         action_row.addWidget(self._manage_btn)
 
         action_row.addStretch(1)
-
-        self._info_btn = QPushButton("Info")
-        self._info_btn.clicked.connect(self._on_info)
-        action_row.addWidget(self._info_btn)
 
         layout.addLayout(action_row)
 
@@ -342,14 +330,10 @@ class PatcherTab(QWidget):
             self._status_label.setText("Invalid UE directory. Please select a valid Unreal Engine installation.")
             return
 
-        action_name = "apply custom engine" if custom_engine else "revert to default"
-        mode_name = "Source files only" if self._source_mode else "Full engine files"
-
         if custom_engine:
             msg = (
                 f"This will copy engine files to:\n{ue_dir}\n\n"
-                f"Version: {version.engine_version} (UE {version.unreal_version})\n"
-                f"Mode: {mode_name}\n\n"
+                f"Version: {version.engine_version} (UE {version.unreal_version})\n\n"
                 "This modifies your UE installation. Continue?"
             )
         else:
@@ -384,11 +368,11 @@ class PatcherTab(QWidget):
             try:
                 if custom_engine:
                     result = self._file_patcher.apply_custom(
-                        version, self._versions, ue_dir, self._versions_root, self._source_mode,
+                        version, self._versions, ue_dir, self._versions_root, False,
                     )
                 else:
                     result = self._file_patcher.apply_default(
-                        version, self._versions, ue_dir, self._versions_root, self._source_mode,
+                        version, self._versions, ue_dir, self._versions_root, False,
                     )
             except Exception as e:
                 result = PatchResult(success=False, message=str(e))
@@ -412,25 +396,6 @@ class PatcherTab(QWidget):
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED};")
             self._status_label.setText(f"Failed: {result.message}")
 
-    def _on_info(self):
-        mode = "Source Mode (copies .h/.cpp files only)" if self._source_mode else "Engine Mode (copies binaries and all files)"
-        QMessageBox.information(
-            self,
-            "About Patcher",
-            "Unreal Engine Tool \u2014 Patcher\n\n"
-            "Applies custom engine files (Rock Pocket Engine) to a UE installation.\n\n"
-            f"Current mode: {mode}\n\n"
-            "Engine Mode: Copies binaries (.dll, .exe, .pdb, etc.)\n"
-            "Source Mode: Copies source files (.h, .cpp) only\n\n"
-            "Versions support parent inheritance \u2014 a child version's files override the parent's.\n\n"
-            "Based on the RPEngineInstaller reference implementation.",
-        )
-
-    def _toggle_source_mode(self):
-        self._source_mode = self._source_mode_btn.isChecked()
-        self._source_mode_btn.setText("Source Mode" if self._source_mode else "Engine Mode")
-        self._update_apply_buttons()
-
     def _on_manage_versions(self):
         """Open the Version Manager dialog."""
         dlg = VersionManagerDialog(self, versions_root=self._versions_root)
@@ -449,9 +414,7 @@ class PatcherTab(QWidget):
     def _set_buttons_enabled(self, enabled: bool):
         self._apply_custom_btn.setEnabled(enabled)
         self._apply_default_btn.setEnabled(enabled)
-        self._source_mode_btn.setEnabled(enabled)
         self._manage_btn.setEnabled(enabled)
         self._browse_btn.setEnabled(enabled)
-        self._info_btn.setEnabled(enabled)
         self._ue_folder_combo.setEnabled(enabled)
         self._version_picker.setEnabled(enabled)
