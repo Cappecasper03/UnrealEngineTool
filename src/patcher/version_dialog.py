@@ -639,7 +639,7 @@ class VersionManagerDialog(QDialog):
         if row < 0 or row >= len(self._versions):
             return
         version = self._versions[row]
-        ver_dir = os.path.dirname(version.info_dir)
+        ver_dir = os.path.normpath(os.path.dirname(version.info_dir))
 
         dlg = FileEntryDialog(self, version_dir=ver_dir)
         if dlg.exec() != QDialog.Accepted:
@@ -659,7 +659,7 @@ class VersionManagerDialog(QDialog):
                     rel = os.path.basename(rel)
                     entry.path_custom = rel
                     entry.path_target = rel
-                dest = os.path.join(ver_dir, rel)
+                dest = os.path.normpath(os.path.join(ver_dir, rel))
                 dest_dir = os.path.dirname(dest)
                 if dest_dir and not os.path.isdir(dest_dir):
                     os.makedirs(dest_dir, exist_ok=True)
