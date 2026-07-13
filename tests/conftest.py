@@ -1,6 +1,7 @@
 import hashlib
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,53 @@ def _ensure_clean_state():
     hard_reset()
     yield
     hard_reset()
+
+
+def pytest_sessionstart():
+    """Auto-create the test patch version metadata and seed custom files before the session begins.
+
+    This makes the test suite fully self-contained — no external fixtures needed.
+    """
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+    from patcher.version_io import create_version, write_info
+    from models import EngineFile
+
+    ver_dir = _PATCHES_ROOT / VERSION_NAME
+    # Remove any stale leftover from a previous run
+    if ver_dir.is_dir():
+        shutil.rmtree(str(ver_dir), onerror=_remove_readonly)
+
+    ver = create_version(str(_PATCHES_ROOT), VERSION_NAME, unreal_version="5.7")
+
+    target_rel = "Engine/Source/Editor/MainFrame/Private/HomeScreen/SHomeScreen.cpp"
+    ver.files.append(EngineFile(
+        path_custom=target_rel,
+        path_default="",
+        path_target=target_rel,
+        local_name="SHomeScreen.cpp",
+    ))
+    write_info(ver)
+
+    # Seed the custom file into the version directory so patcher can find it
+    custom_src = CUSTOM_DIR / target_rel
+    ver_target = ver_dir / target_rel
+    ver_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(custom_src), str(ver_target))
+
+
+def _remove_readonly(func, path, exc_info):
+    """Callback for shutil.rmtree(onerror=...) to make readonly files deletable on Windows."""
+    import stat
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def pytest_sessionfinish():
+    """Clean up the test patch version after the session ends."""
+    ver_dir = _PATCHES_ROOT / VERSION_NAME
+    if ver_dir.is_dir():
+        try:
+            shutil.rmtree(str(ver_dir), onerror=_remove_readonly)
+        except TypeError:
+            # onexc is Python 3.12+; fall back to onerror for 3.11-
+            pass
