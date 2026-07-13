@@ -18,7 +18,6 @@ def _find_project_root() -> Path:
 
 
 PROJECT_ROOT = _find_project_root()
-VERSIONS_ROOT = PROJECT_ROOT / "Versions"
 TEST_ENGINES = PROJECT_ROOT / "Test-Engines"
 
 # Patches are stored under LOCALAPPDATA
