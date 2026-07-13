@@ -10,7 +10,7 @@ import struct
 from typing import List, Optional
 
 from models import EngineFile, EngineInfo
-from patcher.patcher_logger import get_logger
+from logger import get_logger
 
 log = get_logger("version_io")
 HEADER = b"RPEngineHeader"

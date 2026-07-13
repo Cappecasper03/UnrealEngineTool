@@ -50,7 +50,7 @@ def md5(path: str) -> str:
 
 def _get_versions_root() -> str:
     """Resolve the patches directory under LOCALAPPDATA."""
-    from patcher.patcher_logger import default_patches_root
+    from logger import default_patches_root
     return default_patches_root()
 
 

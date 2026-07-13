@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from patcher.patcher_logger import get_logger, enable_stdout, log_path
+from logger import get_logger, enable_stdout, log_path
 
 
 def _log_dir() -> str:
@@ -28,7 +28,7 @@ class TestLoggerInit:
         l = get_logger("test_path")
         p = log_path()
         assert p != ""
-        assert "patcher_" in p
+        assert "unrealenginetool_" in p
         assert ".log" in p
         assert _log_dir().lower() in p.lower()
 
@@ -67,7 +67,7 @@ class TestLogContent:
 
     def test_logger_name_format(self):
         l = get_logger("test_format")
-        assert l.name == "patcher.test_format"
+        assert l.name == "unrealenginetool.test_format"
 
 
 class TestLogDirectory:

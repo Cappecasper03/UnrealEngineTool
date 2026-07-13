@@ -19,7 +19,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import EngineInfo
-from patcher.patcher_logger import get_logger, enable_stdout
+from logger import get_logger, enable_stdout
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
 
@@ -28,7 +28,7 @@ log = get_logger("cli")
 
 def _get_versions_root() -> str:
     """Resolve the patches directory under LOCALAPPDATA."""
-    from patcher.patcher_logger import default_patches_root
+    from logger import default_patches_root
     return default_patches_root()
 
 
@@ -138,7 +138,7 @@ def _do_apply(args: argparse.Namespace, custom_engine: bool) -> int:
 
 def _cmd_log_path(args: argparse.Namespace) -> int:
     """Show the log file location."""
-    from patcher.patcher_logger import log_path
+    from logger import log_path
     path = log_path()
     if path:
         print(f"Log file: {path}")

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
 from models import EngineInfo
-from patcher.patcher_logger import get_logger
+from logger import get_logger
 
 log = get_logger("file_patcher")
 

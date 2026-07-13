@@ -1,6 +1,6 @@
-"""Logger setup for the patcher — writes to file (always) and stdout (CLI mode).
+"""Application-wide logger — writes to file (always) and stdout (CLI mode).
 
-Log file: %LOCALAPPDATA%/UnrealEngineTool/logs/patcher_<timestamp>.log
+Log file: %LOCALAPPDATA%/UnrealEngineTool/logs/unrealenginetool_<timestamp>.log
 A new file is created per session. CLI mode adds a stdout handler for interactive use.
 """
 
@@ -18,6 +18,8 @@ _INITIALISED = False
 
 _FORMAT = "%(asctime)s  %(levelname)-5s  %(name)s  %(message)s"
 _DATE_FMT = "%Y-%m-%d %H:%M:%S"
+
+_LOG_PREFIX = "unrealenginetool"
 
 
 def _default_log_dir() -> str:
@@ -51,7 +53,7 @@ def _init():
 
     log_dir = _default_log_dir()
     ts = _session_timestamp()
-    log_path = os.path.join(log_dir, f"patcher_{ts}.log")
+    log_path = os.path.join(log_dir, f"{_LOG_PREFIX}_{ts}.log")
 
     # Create directory if needed
     _LOG_DIR = log_dir
@@ -60,13 +62,13 @@ def _init():
             os.makedirs(_LOG_DIR, exist_ok=True)
         except OSError:
             _LOG_DIR = os.path.expanduser("~")
-            log_path = os.path.join(_LOG_DIR, f"patcher_{ts}.log")
+            log_path = os.path.join(_LOG_DIR, f"{_LOG_PREFIX}_{ts}.log")
 
     _FILE_HANDLER = logging.FileHandler(log_path, encoding="utf-8")
     _FILE_HANDLER.setLevel(logging.DEBUG)
     _FILE_HANDLER.setFormatter(logging.Formatter(_FORMAT, _DATE_FMT))
 
-    root_logger = logging.getLogger("patcher")
+    root_logger = logging.getLogger("unrealenginetool")
     root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(_FILE_HANDLER)
 
@@ -74,9 +76,9 @@ def _init():
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Get a patcher logger. Always logs to file; CLI can also enable stdout."""
+    """Get a application logger. Always logs to file; CLI can also enable stdout."""
     _init()
-    logger = logging.getLogger(f"patcher.{name}")
+    logger = logging.getLogger(f"unrealenginetool.{name}")
     logger.setLevel(logging.DEBUG)
     return logger
 
@@ -92,7 +94,7 @@ def enable_stdout(level: int = logging.INFO):
     _STDOUT_HANDLER.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-5s  %(message)s", _DATE_FMT,
     ))
-    root_logger = logging.getLogger("patcher")
+    root_logger = logging.getLogger("unrealenginetool")
     root_logger.addHandler(_STDOUT_HANDLER)
 
 

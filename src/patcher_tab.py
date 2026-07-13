@@ -21,7 +21,7 @@ from theme import (
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
 from patcher.version_dialog import VersionManagerDialog
-from patcher.patcher_logger import get_logger
+from logger import get_logger
 
 log = get_logger("patcher_tab")
 
