@@ -12,6 +12,12 @@ set VENV_DIR=%PROJECT_ROOT%.venv
 set DIST_DIR=%PROJECT_ROOT%dist
 set BUILD_DIR=%PROJECT_ROOT%build
 
+set SPEC_DIR=%PROJECT_ROOT%
+
+REM ---- Clean up stale .spec files from previous builds ----
+if exist "%SPEC_DIR%UnrealEngineTool.spec" del "%SPEC_DIR%UnrealEngineTool.spec"
+if exist "%SPEC_DIR%UnrealEngineTool-CLI.spec" del "%SPEC_DIR%UnrealEngineTool-CLI.spec"
+
 REM ---- Activate virtual environment ----
 if exist "%VENV_DIR%\Scripts\activate.bat" (
     call "%VENV_DIR%\Scripts\activate.bat"
@@ -123,7 +129,7 @@ echo   dist\UnrealEngineTool.exe         (!FILESIZE! KB)
 echo   dist\UnrealEngineTool-CLI.exe     (!CLI_FILESIZE! KB)
 echo.
 echo Usage:
-echo   dist\UnrealEngineTool.exe              # Launch GUI
+echo   dist\UnrealEngineTool.exe               # Launch GUI
 echo   dist\UnrealEngineTool.exe list          # CLI: list patches
 echo   dist\UnrealEngineTool-CLI.exe list      # CLI only (smaller)
 echo   dist\UnrealEngineTool-CLI.exe apply ^<ver^> ^<dir^>

@@ -15,6 +15,9 @@ build/
 Thumbs.db
 .DS_Store
 
+# PyInstaller generated specs (regenerated from build.bat flags)
+*.spec
+
 # Project-specific
 Versions/
 Test-Engines/
