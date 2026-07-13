@@ -70,11 +70,6 @@ class TestPluginDataModel:
         p.restore_original()
         assert p.is_modified is False
 
-    def test_installed_modification_tracked(self):
-        p = _make_plugin("TestP")
-        p.installed = True
-        assert p.is_modified is True
-
 
 # ── UPluginPatcher Tests ─────────────────────────────────
 
@@ -130,18 +125,6 @@ class TestUPluginPatcher:
         p = next(x for x in working if x.name == "Alpha")
         data = _read_uplugin(p.full_path)
         assert data["EnabledByDefault"] is False
-
-    def test_apply_toggle_installed(self, patcher, original_plugins):
-        def modify(plugs):
-            p = next(x for x in plugs if x.name == "Alpha")
-            p.installed = True
-
-        result, working = self._modify_and_apply(original_plugins, original_plugins, patcher, modify)
-        assert result.modified_count == 1
-
-        p = next(x for x in working if x.name == "Alpha")
-        data = _read_uplugin(p.full_path)
-        assert data["Installed"] is True
 
     def test_apply_injects_missing_fields(self, patcher, original_plugins):
         def modify(plugs):

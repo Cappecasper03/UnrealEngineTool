@@ -14,26 +14,22 @@ class PluginData:
     version_name: str = ""
     enabled_by_default: bool = False
     installed: bool = False
-    relative_path: str = ""  # Relative to Engine/Plugins/
-    full_path: str = ""  # Absolute path to .uplugin file
-    icon_path: str = ""  # Path to plugin icon (128x128 PNG)
+    relative_path: str = ""
+    full_path: str = ""
+    icon_path: str = ""
 
-    # Snapshot for detecting modifications
+    # Snapshot for detecting modifications (EnabledByDefault only)
     _original_enabled: bool = False
-    _original_installed: bool = False
 
     def snapshot_original(self):
         self._original_enabled = self.enabled_by_default
-        self._original_installed = self.installed
 
     def restore_original(self):
         self.enabled_by_default = self._original_enabled
-        self.installed = self._original_installed
 
     @property
     def is_modified(self) -> bool:
-        return (self.enabled_by_default != self._original_enabled or
-                self.installed != self._original_installed)
+        return self.enabled_by_default != self._original_enabled
 
 
 # ───── Patcher Models ─────

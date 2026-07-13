@@ -4,7 +4,10 @@ import json
 import os
 from typing import Callable, List, Optional
 
+from logger import get_logger
 from models import PluginData
+
+log = get_logger("plugin_scanner")
 
 # Directories to skip when scanning plugin folders
 IGNORED_FOLDERS = frozenset({
@@ -31,6 +34,7 @@ class UPluginScanner:
 
         plugins: List[PluginData] = []
         self._scan_directory(plugins_dir, plugins_dir, plugins, progress_callback)
+        log.info("scan: found %d plugin(s) under %s", len(plugins), plugins_dir)
         return plugins
 
     def _scan_directory(
@@ -104,8 +108,12 @@ class UPluginScanner:
             data.enabled_by_default = root.get("EnabledByDefault", False)
             data.installed = root.get("Installed", False)
 
+            log.debug("  Found plugin: %s (enabled=%s, installed=%s)",
+                      data.name, str(data.enabled_by_default).lower(), str(data.installed).lower())
+
         except (json.JSONDecodeError, OSError) as e:
             data.description = f"[Parse error: {e}]"
+            log.warning("  Parse error for %s: %s", full_path, e)
 
         data.snapshot_original()
 

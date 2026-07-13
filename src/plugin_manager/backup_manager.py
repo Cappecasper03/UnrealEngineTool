@@ -3,7 +3,10 @@
 import os
 from typing import List, Set
 
+from logger import get_logger
 from models import PluginData
+
+log = get_logger("backup_manager")
 
 
 class BackupManager:
@@ -13,17 +16,19 @@ class BackupManager:
         """Save a backup of all currently enabled-by-default plugins (absolute paths)."""
         lines = []
         plugins_root = os.path.join(ue_root, "Engine", "Plugins")
-        for p in plugins:
-            if p.enabled_by_default:
-                lines.append(os.path.join(plugins_root, p.relative_path))
+        enabled = [p for p in plugins if p.enabled_by_default]
+        for p in enabled:
+            lines.append(os.path.join(plugins_root, p.relative_path))
         with open(file_path, "w") as f:
             f.write("\n".join(lines) + "\n")
+        log.info("save_backup: %d plugin(s) saved to %s", len(enabled), file_path)
 
     def save_template(self, file_path: str, plugins: List[PluginData]):
         """Save a template of enabled-by-default plugins (relative paths)."""
         lines = [p.relative_path for p in plugins if p.enabled_by_default]
         with open(file_path, "w") as f:
             f.write("\n".join(lines) + "\n")
+        log.info("save_template: %d plugin(s) saved to %s", len(lines), file_path)
 
     def load_backup(self, file_path: str, plugins: List[PluginData], ue_root: str) -> int:
         """Load a backup file and apply EnabledByDefault state. Returns restore count."""
@@ -40,7 +45,6 @@ class BackupManager:
             trimmed = line.strip()
             if not trimmed:
                 continue
-            # Extract relative path if it's absolute
             if trimmed.startswith(plugins_root):
                 rel = os.path.relpath(trimmed, plugins_root).replace("\\", "/")
                 enabled_paths.add(rel)
@@ -54,6 +58,7 @@ class BackupManager:
                 count += 1
             else:
                 p.enabled_by_default = False
+        log.info("load_backup: restored state for %d plugin(s) from %s", count, file_path)
         return count
 
     def load_template(self, file_path: str, plugins: List[PluginData]) -> int:
@@ -73,6 +78,7 @@ class BackupManager:
                 count += 1
             else:
                 p.enabled_by_default = False
+        log.info("load_template: applied template for %d plugin(s) from %s", count, file_path)
         return count
 
     def apply_minimal(self, plugins: List[PluginData]) -> int:
@@ -89,4 +95,5 @@ class BackupManager:
                 count += 1
             else:
                 p.enabled_by_default = False
+        log.info("apply_minimal: %d plugin(s) remain enabled", count)
         return count
