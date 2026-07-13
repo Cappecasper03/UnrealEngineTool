@@ -10,7 +10,9 @@ import struct
 from typing import List, Optional
 
 from models import EngineFile, EngineInfo
+from patcher.patcher_logger import get_logger
 
+log = get_logger("version_io")
 HEADER = b"RPEngineHeader"
 
 
@@ -145,6 +147,7 @@ def create_version(
                        path_target=f.path_target, local_name=f.local_name)
             for f in clone_from.files
         ]
+        log.info("create_version: cloned from %s (%d files)", clone_from.engine_version, len(files))
 
     info = EngineInfo(
         info_dir=os.path.join(ver_dir, "info.dat"),
@@ -156,6 +159,7 @@ def create_version(
         files=files,
     )
     write_info(info)
+    log.info("create_version: created '%s' at %s", engine_version, info.info_dir)
     return info
 
 
@@ -166,4 +170,5 @@ def delete_version(version: EngineInfo) -> None:
         raise FileNotFoundError(f"Version directory not found: {ver_dir}")
     import shutil
     shutil.rmtree(ver_dir)
+    log.info("delete_version: removed '%s' at %s", version.engine_version, ver_dir)
 

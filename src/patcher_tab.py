@@ -21,6 +21,9 @@ from theme import (
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
 from patcher.version_dialog import VersionManagerDialog
+from patcher.patcher_logger import get_logger
+
+log = get_logger("patcher_tab")
 
 
 def _make_section_card(title: str) -> tuple:
@@ -307,7 +310,8 @@ class PatcherTab(QWidget):
         try:
             self._versions = discover_versions(self._versions_root)
             if self._versions:
-                for v in self._versions:
+                log.info("Discovered %d version(s) from %s", len(self._versions), self._versions_root)
+                for v in self._versions:                  
                     self._version_picker.addItem(f"{v.engine_version}  ({v.unreal_dir})" if v.unreal_dir else v.engine_version)
                 self._version_picker.setCurrentIndex(len(self._versions) - 1)
                 self._on_version_selected(len(self._versions) - 1)
@@ -324,6 +328,7 @@ class PatcherTab(QWidget):
             self._on_ue_dir_changed()
 
         except Exception as e:
+            log.error("Error discovering versions from %s: %s", self._versions_root, e)
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText(f"Error discovering versions: {e}")
 
@@ -403,6 +408,9 @@ class PatcherTab(QWidget):
         self._is_working = True
         self._set_buttons_enabled(False)
 
+        action_label = "custom" if custom_engine else "default"
+        log.info("GUI apply start: %s version=%s target=%s", action_label, version.engine_version, ue_dir)
+
         self._operation_label.setText("Applying custom engine\u2026" if custom_engine else "Reverting to default\u2026")
         self._operation_label.setVisible(True)
         self._operation_progress.setVisible(True)
@@ -434,10 +442,12 @@ class PatcherTab(QWidget):
         self._set_buttons_enabled(True)
 
         if result.success:
+            log.info("GUI apply result: success — %s", result.message)
             self._status_label.setStyleSheet(f"color: {C_ACCENT_GREEN}; font-size: 12px;")
             self._status_label.setText(f"Success: {result.message}")
             self._on_ue_dir_changed()  # Refresh applied indicator (reads marker)
         else:
+            log.error("GUI apply result: failed — %s", result.message)
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText(f"Failed: {result.message}")
 

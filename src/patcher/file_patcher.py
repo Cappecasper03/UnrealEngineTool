@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
 from models import EngineInfo
+from patcher.patcher_logger import get_logger
+
+log = get_logger("file_patcher")
 
 
 @dataclass
@@ -49,7 +52,9 @@ class FilePatcher:
             return ""
         try:
             with open(path, "r") as f:
-                return f.read().strip()
+                value = f.read().strip()
+            log.debug("Read marker from %s: %s", path, value)
+            return value
         except OSError:
             return ""
 
@@ -119,6 +124,8 @@ class FilePatcher:
                 f"Invalid UE directory: {ue_install_dir} "
                 f"({'source' if source_mode else 'engine'} test file not found)"
             )
+            log.error("Invalid UE directory: %s (%s test file missing)", ue_install_dir,
+                      "source" if source_mode else "engine")
             return result
 
         files_to_copy: List[Tuple[str, str]] = []
@@ -133,6 +140,11 @@ class FilePatcher:
         )
 
         ver_dir = os.path.join(versions_root, engine_version.engine_version)
+
+        action_label = "custom" if custom_engine else "default"
+        log.info("%s apply start — version=%s target=%s files_to_copy=%d files_to_remove=%d",
+                 action_label, engine_version.engine_version, ue_install_dir,
+                 len(files_to_copy), len(files_to_remove))
 
         if custom_engine:
             # ── Back up originals before overwriting ──
@@ -159,6 +171,7 @@ class FilePatcher:
                             fe.path_default = backup_rel
                             break
                     result.files_removed += 1  # Reuse as "backed up" counter
+                    log.debug("Backed up: %s -> %s", dst, backup_abs)
                 except OSError as e:
                     result.success = False
                     result.message = f"Failed to back up {dst}: {e}"
@@ -177,6 +190,7 @@ class FilePatcher:
             if not os.path.isfile(src):
                 result.success = False
                 result.message = f"Source file not found: {src}"
+                log.error("Source file not found: %s", src)
                 return result
 
         # Copy files (custom → UE, or default → UE on revert)
@@ -192,6 +206,7 @@ class FilePatcher:
                     df.write(sf.read())
                 os.chmod(dst, os.stat(dst).st_mode & ~0o222)  # Make readonly
                 result.files_copied += 1
+                log.debug("Copied: %s -> %s", src, dst)
             except OSError as e:
                 result.success = False
                 result.message = f"Failed to copy {src} -> {dst}: {e}"
@@ -205,6 +220,7 @@ class FilePatcher:
                 os.chmod(file_path, os.stat(file_path).st_mode | 0o200)
                 os.remove(file_path)
                 result.files_removed += 1
+                log.debug("Removed: %s", file_path)
             except OSError as e:
                 result.success = False
                 result.message = f"Failed to remove {file_path}: {e}"
@@ -217,13 +233,15 @@ class FilePatcher:
             f"{result.files_removed} removed."
         )
         # Write marker so we can detect applied version on next launch
+        marker_value = "default" if not custom_engine else engine_version.engine_version
         try:
-            self.write_marker(
-                ue_install_dir,
-                "default" if not custom_engine else engine_version.engine_version,
-            )
+            self.write_marker(ue_install_dir, marker_value)
+            log.info("Marker written: %s -> %s", marker_value, FilePatcher.marker_path(ue_install_dir))
         except OSError:
             pass  # Non-fatal — marker is just a convenience
+
+        log.info("Result: %s (files_copied=%d files_removed=%d)",
+                 "✓" if result.success else "✗", result.files_copied, result.files_removed)
         return result
 
     def _collect_files(

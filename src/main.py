@@ -6,9 +6,9 @@ Built with PySide6.
 
 Usage:
     python src/main.py                          # GUI mode
-    python src/main.py --cli list               # Headless: list versions
-    python src/main.py --cli apply-custom <ver> <dir>   # Headless: apply custom
-    python src/main.py --cli apply-default <ver> <dir>  # Headless: revert
+    python src/main.py list                     # Headless: list versions
+    python src/main.py apply-custom <ver> <dir> # Headless: apply custom
+    python src/main.py apply-default <ver> <dir># Headless: revert
 """
 
 import sys
@@ -17,14 +17,23 @@ import os
 # Ensure the src directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Known CLI subcommands — any of these as the first arg triggers headless mode
+_CLI_COMMANDS = frozenset({
+    "list", "log-path",
+    "apply-custom", "apply",
+    "apply-default", "revert",
+    "-h", "--help",
+})
+
 
 def main():
     """Entry point — dispatches to GUI or headless CLI."""
 
     # ── Headless CLI mode ──
-    if len(sys.argv) >= 2 and sys.argv[1] == "--cli":
+    # Any known subcommand as the first arg triggers headless mode
+    if len(sys.argv) >= 2 and sys.argv[1] in _CLI_COMMANDS:
         from patcher_cli import main as cli_main
-        sys.exit(cli_main(sys.argv[2:]))
+        sys.exit(cli_main(sys.argv[1:]))
 
     # ── GUI mode ──
     from PySide6.QtWidgets import (

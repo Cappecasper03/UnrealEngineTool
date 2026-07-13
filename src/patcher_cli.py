@@ -5,9 +5,9 @@ Runs the patcher logic (apply-custom / apply-default) without a GUI.
 Designed for scripting and CI pipelines.
 
 Usage:
-    python src/main.py --cli list
-    python src/main.py --cli apply-custom <version-name> <ue-install-dir>
-    python src/main.py --cli apply-default <version-name> <ue-install-dir>
+    python src/main.py list
+    python src/main.py apply-custom <version-name> <ue-install-dir>
+    python src/main.py apply-default <version-name> <ue-install-dir>
 """
 
 import argparse
@@ -19,8 +19,11 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import EngineInfo
+from patcher.patcher_logger import get_logger, enable_stdout
 from patcher.version_io import discover_versions
 from patcher.file_patcher import FilePatcher, PatchResult
+
+log = get_logger("cli")
 
 
 def _get_versions_root() -> str:
@@ -84,6 +87,7 @@ def _do_apply(args: argparse.Namespace, custom_engine: bool) -> int:
     versions = discover_versions(root)
 
     if not versions:
+        log.error("No patch versions found at %s", root)
         print("Error: No patch versions found.")
         print(f"Versions directory: {root}")
         return 1
@@ -91,12 +95,14 @@ def _do_apply(args: argparse.Namespace, custom_engine: bool) -> int:
     # Normalise UE install directory
     ue_dir = os.path.normpath(os.path.abspath(args.ue_dir))
     if not os.path.isdir(ue_dir):
+        log.error("UE install directory does not exist: %s", ue_dir)
         print(f"Error: UE install directory does not exist: {ue_dir}")
         return 1
 
     # Find the requested version
     version = _find_version(args.version_name, versions)
     if not version:
+        log.error("Version '%s' not found", args.version_name)
         print(
             f"Error: Version '{args.version_name}' not found. "
             f"Use 'list' to see available versions."
@@ -105,6 +111,7 @@ def _do_apply(args: argparse.Namespace, custom_engine: bool) -> int:
 
     # Run the patcher
     label = "custom" if custom_engine else "default"
+    log.info("Starting %s apply: version=%s target=%s", label, version.engine_version, ue_dir)
     print(
         f"Applying {label} engine '{version.engine_version}' "
         f"to {ue_dir} ..."
@@ -121,11 +128,24 @@ def _do_apply(args: argparse.Namespace, custom_engine: bool) -> int:
         )
 
     if result.success:
+        log.info("Apply %s succeeded: %s", label, result.message)
         print(f"Success: {result.message}")
         return 0
     else:
+        log.error("Apply %s failed: %s", label, result.message)
         print(f"Failed: {result.message}", file=sys.stderr)
         return 1
+
+
+def _cmd_log_path(args: argparse.Namespace) -> int:
+    """Show the log file location."""
+    from patcher.patcher_logger import log_path
+    path = log_path()
+    if path:
+        print(f"Log file: {path}")
+    else:
+        print("Logger not initialised yet.")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -136,11 +156,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  # List available patch versions\n"
-            "  python src/main.py --cli list\n\n"
+            "  python src/main.py list\n\n"
             "  # Apply a custom engine version\n"
-            "  python src/main.py --cli apply-custom UE_5.7-Test \"C:/Program Files/UE_5.7\"\n\n"
+            "  python src/main.py apply-custom UE_5.7-Test \"C:/Program Files/UE_5.7\"\n\n"
             "  # Revert to default\n"
-            "  python src/main.py --cli apply-default UE_5.7-Test \"C:/Program Files/UE_5.7\"\n"
+            "  python src/main.py apply-default UE_5.7-Test \"C:/Program Files/UE_5.7\"\n"
         ),
     )
 
@@ -148,6 +168,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # list
     subparsers.add_parser("list", help="List available patch versions")
+
+    # log-path
+    subparsers.add_parser("log-path", help="Show the log file location")
 
     # apply-custom
     apply_custom = subparsers.add_parser(
@@ -181,6 +204,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     Returns exit code (0 = success, 1 = error).
     """
+    enable_stdout()
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -190,6 +215,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "apply": cmd_apply_custom,
         "apply-default": cmd_apply_default,
         "revert": cmd_apply_default,
+        "log-path": _cmd_log_path,
     }
 
     handler = command_map.get(args.command)
