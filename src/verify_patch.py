@@ -49,10 +49,9 @@ def md5(path: str) -> str:
 
 
 def _get_versions_root() -> str:
-    """Resolve the Versions/ directory relative to the project root."""
-    return os.path.normpath(os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "Versions"
-    ))
+    """Resolve the patches directory under LOCALAPPDATA."""
+    from patcher.patcher_logger import default_patches_root
+    return default_patches_root()
 
 
 def _find_version(

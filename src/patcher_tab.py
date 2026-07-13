@@ -85,9 +85,12 @@ class PatcherTab(QWidget):
         self._versions: List[EngineInfo] = []
         self._current_ue_root = ""
         self._is_working = False
-        self._versions_root = os.path.normpath(os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "Versions"
-        ))
+        self._versions_root = os.path.normpath(
+            os.path.join(
+                os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+                "UnrealEngineTool", "patches",
+            )
+        )
 
         self._build_ui()
         self._discover_versions()

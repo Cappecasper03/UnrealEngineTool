@@ -20,6 +20,9 @@ PROJECT_ROOT = _find_project_root()
 VERSIONS_ROOT = PROJECT_ROOT / "Versions"
 TEST_ENGINES = PROJECT_ROOT / "Test-Engines"
 
+# Patches are stored under LOCALAPPDATA
+_PATCHES_ROOT = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / "UnrealEngineTool" / "patches"
+
 # Test engine fixture directories
 ORIGINAL_DIR = TEST_ENGINES / "UE_5.7-Original"
 CUSTOM_DIR = TEST_ENGINES / "UE_5.7-Custom"
@@ -102,7 +105,7 @@ def version_name() -> str:
 
 @pytest.fixture
 def versions_root() -> Path:
-    return VERSIONS_ROOT
+    return _PATCHES_ROOT
 
 
 @pytest.fixture

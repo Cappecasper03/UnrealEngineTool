@@ -13,12 +13,12 @@ from patcher.version_io import (
 )
 from models import EngineFile, EngineInfo
 
-from .conftest import VERSIONS_ROOT, VERSION_NAME
+from .conftest import _PATCHES_ROOT, VERSION_NAME
 
 
 @pytest.fixture
 def test_info_path() -> Path:
-    return VERSIONS_ROOT / VERSION_NAME / "info.dat"
+    return _PATCHES_ROOT / VERSION_NAME / "info.dat"
 
 
 class TestReadInfo:
@@ -42,7 +42,7 @@ class TestDiscoverVersions:
     """Version discovery from directory."""
 
     def test_discover_finds_test_version(self):
-        versions = discover_versions(str(VERSIONS_ROOT))
+        versions = discover_versions(str(_PATCHES_ROOT))
         names = [v.engine_version for v in versions]
         assert VERSION_NAME in names
 

@@ -29,6 +29,15 @@ def _default_log_dir() -> str:
     )
 
 
+def default_patches_root() -> str:
+    """Resolve %LOCALAPPDATA%/UnrealEngineTool/patches."""
+    return os.path.join(
+        os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
+        "UnrealEngineTool",
+        "patches",
+    )
+
+
 def _session_timestamp() -> str:
     """Return a compact, sortable timestamp for this session."""
     return datetime.now().strftime("%Y%m%d_%H%M%S")

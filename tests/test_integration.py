@@ -10,9 +10,9 @@ from patcher.file_patcher import FilePatcher, PatchResult
 from patcher.version_io import discover_versions
 
 from .conftest import (
-    PROJECT_ROOT, VERSIONS_ROOT, UE_INSTALL_DIR, VERSION_NAME,
+    PROJECT_ROOT, UE_INSTALL_DIR, VERSION_NAME,
     TARGET_FILE, MARKER_FILE, CUSTOM_SRC, ORIGINAL_SRC,
-    md5, VERSION_NAME,
+    md5, _PATCHES_ROOT,
 )
 
 
@@ -35,10 +35,10 @@ class TestFullWorkflow:
 
     def test_002_apply_custom(self):
         patcher = FilePatcher()
-        versions = discover_versions(str(VERSIONS_ROOT))
+        versions = discover_versions(str(_PATCHES_ROOT))
         v = next(x for x in versions if x.engine_version == VERSION_NAME)
         result = patcher.apply_custom(
-            v, versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            v, versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success
@@ -51,10 +51,10 @@ class TestFullWorkflow:
 
     def test_004_revert(self):
         patcher = FilePatcher()
-        versions = discover_versions(str(VERSIONS_ROOT))
+        versions = discover_versions(str(_PATCHES_ROOT))
         v = next(x for x in versions if x.engine_version == VERSION_NAME)
         result = patcher.apply_default(
-            v, versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            v, versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success

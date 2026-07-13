@@ -11,9 +11,9 @@ from patcher.file_patcher import FilePatcher, PatchResult
 from patcher.version_io import discover_versions
 
 from .conftest import (
-    PROJECT_ROOT, VERSIONS_ROOT, UE_INSTALL_DIR, VERSION_NAME,
+    PROJECT_ROOT, _PATCHES_ROOT, UE_INSTALL_DIR, VERSION_NAME,
     TARGET_FILE, MARKER_FILE, CUSTOM_SRC, ORIGINAL_SRC,
-    VERSION_NAME, md5,
+    VERSION_NAME, md5, _PATCHES_ROOT,
 )
 
 
@@ -24,7 +24,7 @@ def patcher() -> FilePatcher:
 
 @pytest.fixture
 def version():
-    versions = discover_versions(str(VERSIONS_ROOT))
+    versions = discover_versions(str(_PATCHES_ROOT))
     v = next((x for x in versions if x.engine_version == VERSION_NAME), None)
     assert v is not None, f"Version {VERSION_NAME} not found"
     return v
@@ -32,7 +32,7 @@ def version():
 
 @pytest.fixture
 def all_versions():
-    return discover_versions(str(VERSIONS_ROOT))
+    return discover_versions(str(_PATCHES_ROOT))
 
 
 class TestMarker:
@@ -57,7 +57,7 @@ class TestApplyCustom:
     def test_apply_custom_success(self, patcher, version, all_versions):
         original_hash = md5(TARGET_FILE)
         result = patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success, f"failed: {result.message}"
@@ -69,12 +69,12 @@ class TestApplyCustom:
         assert MARKER_FILE.read_text().strip() == VERSION_NAME
 
     def test_apply_custom_creates_backup(self, patcher, version, all_versions):
-        backup_dir = VERSIONS_ROOT / VERSION_NAME / "_originals"
+        backup_dir = _PATCHES_ROOT / VERSION_NAME / "_originals"
         target_rel = "Engine/Source/Editor/MainFrame/Private/HomeScreen/SHomeScreen.cpp"
         backup_path = backup_dir / target_rel
 
         result = patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success
@@ -88,14 +88,14 @@ class TestApplyDefault:
     def test_revert_success(self, patcher, version, all_versions):
         # Apply custom first so we have something to revert
         patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert md5(TARGET_FILE) == md5(CUSTOM_SRC)
 
         # Now revert
         result = patcher.apply_default(
-            version, all_versions, str(UE_INSTALL_DIR), str(VERSIONS_ROOT),
+            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success, f"failed: {result.message}"
