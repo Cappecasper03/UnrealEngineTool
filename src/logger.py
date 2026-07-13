@@ -22,7 +22,7 @@ _FILE_HANDLER: Optional[logging.FileHandler] = None
 _STDOUT_HANDLER: Optional[logging.StreamHandler] = None
 _INITIALISED = False
 
-_FORMAT = "%(asctime)s  %(levelname)-5s  %(relpath)s  %(message)s"
+_FORMAT = "%(asctime)s  %(levelname)-5s  [%(relpath)s]  %(message)s"
 _DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
 _LOG_FILENAME = "UnrealEngineTool"
@@ -156,7 +156,7 @@ def enable_stdout(level: int = logging.INFO):
     _STDOUT_HANDLER = logging.StreamHandler(sys.stdout)
     _STDOUT_HANDLER.setLevel(level)
     _STDOUT_HANDLER.setFormatter(_RelPathFormatter(
-        "%(asctime)s  %(levelname)-5s  %(message)s", _DATE_FMT,
+        "%(asctime)s  %(levelname)-5s  [%(relpath)s]  %(message)s", _DATE_FMT,
     ))
     root_logger = logging.getLogger("unrealenginetool")
     root_logger.addHandler(_STDOUT_HANDLER)

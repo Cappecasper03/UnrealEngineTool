@@ -34,9 +34,12 @@ from typing import List, Optional, Tuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+from logger import get_logger
 from patcher.version_io import discover_versions, read_info
 from patcher.file_patcher import FilePatcher
 from models import EngineInfo
+
+log = get_logger("verify_patch")
 
 
 def md5(path: str) -> str:
@@ -91,6 +94,8 @@ def verify(
 
     if verbose:
         print(f"[OK] Marker: {marker}")
+
+    log.debug("Marker check: expected=%s actual=%s OK", expected_version, marker)
 
     # Special case: "default" means not applied — just check marker
     if expected_lower == "default":
@@ -148,8 +153,12 @@ def verify(
             f"at {ue_dir}:\n"
             + "\n".join(issues)
         )
+        log.warning("Verification FAILED for %s at %s: %d issue(s)",
+                     expected_version, ue_dir, len(issues))
         return False, report
 
+    log.info("Verification PASSED for %s at %s: %d file(s) OK",
+             expected_version, ue_dir, ok_count)
     return (
         True,
         f"All {ok_count} file(s) match '{expected_version}' "

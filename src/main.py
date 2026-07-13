@@ -17,6 +17,9 @@ import os
 # Ensure the src directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from logger import get_logger
+log = get_logger("main")
+
 # Known CLI subcommands — any of these as the first arg triggers headless mode
 _CLI_COMMANDS = frozenset({
     "list", "log-path",
@@ -32,10 +35,12 @@ def main():
     # ── Headless CLI mode ──
     # Any known subcommand as the first arg triggers headless mode
     if len(sys.argv) >= 2 and sys.argv[1] in _CLI_COMMANDS:
+        log.info("Starting in headless CLI mode: %s", " ".join(sys.argv[1:]))
         from patcher_cli import main as cli_main
         sys.exit(cli_main(sys.argv[1:]))
 
     # ── GUI mode ──
+    log.info("Starting in GUI mode")
     from PySide6.QtWidgets import (
         QApplication, QMainWindow, QTabWidget,
         QVBoxLayout, QWidget,

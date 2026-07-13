@@ -15,9 +15,12 @@ from PySide6.QtWidgets import (
 from models import PluginData
 from registry_helper import discover_ue_installations
 from theme import C_ACCENT_ORANGE, C_TEXT_DIM, C_TEXT_BRIGHT, C_CARD, C_CARD_BORDER
+from logger import get_logger
 from plugin_manager.scanner import UPluginScanner
 from plugin_manager.patcher import UPluginPatcher
 from plugin_manager.backup_manager import BackupManager
+
+log = get_logger("plugin_manager_tab")
 
 
 class ScanWorker(QObject):
@@ -353,6 +356,8 @@ class PluginManagerTab(QWidget):
             self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.UserRole)
             self._ue_folder_combo.setItemData(idx, p, Qt.ItemDataRole.ToolTipRole)
 
+        log.info("Discovered %d UE path(s)", len(paths))
+
         self._ue_folder_combo.blockSignals(False)
 
         # Auto-select and scan the first discovered installation
@@ -396,6 +401,8 @@ class PluginManagerTab(QWidget):
         self._plugins.clear()
         self._tree.clear()
 
+        log.info("Starting plugin scan: %s", self._current_ue_root)
+
         # Background scan
         self._scanning_label.setText(f"Scanning {self._current_ue_root}\u2026")
         self._scan_progress.setMaximum(0)  # Indeterminate
@@ -435,6 +442,7 @@ class PluginManagerTab(QWidget):
         self._refresh_view()
         self._update_stats()
         self._auto_save_backup()
+        log.info("Scan finished: %d plugin(s) found", len(plugins))
 
     def _auto_save_backup(self):
         """Save an automatic timestamped backup after a fresh scan (always enabled, keep 10)."""
@@ -539,14 +547,17 @@ class PluginManagerTab(QWidget):
             return
 
         plugins_root = os.path.join(self._current_ue_root, "Engine", "Plugins")
+        log.info("Applying changes to %s", plugins_root)
         result = self._patcher.apply_changes(self._plugins, self._original_plugins, plugins_root)
 
         if result.error_count > 0:
             msg = f"Applied {result.modified_count} changes with {result.error_count} errors:\n"
             msg += "\n".join(result.errors)
             QMessageBox.warning(self, "Apply Results", msg)
+            log.warning("Apply changes: %d succeeded, %d error(s)", result.modified_count, result.error_count)
         else:
             QMessageBox.information(self, "Apply Complete", f"Successfully applied {result.modified_count} change(s).")
+            log.info("Apply changes: %d succeeded, no errors", result.modified_count)
 
         # Update original snapshots
         for p in self._plugins:
@@ -586,6 +597,7 @@ class PluginManagerTab(QWidget):
         if not path:
             return
         self._backup.save_backup(path, self._plugins, self._current_ue_root)
+        log.info("Backup saved: %s (%d plugins)", path, len(self._plugins))
         QMessageBox.information(self, "Backup Saved", f"Backup saved to:\n{path}")
 
     def _on_load_backup(self):
@@ -596,6 +608,7 @@ class PluginManagerTab(QWidget):
             return
         count = self._backup.load_backup(path, self._plugins, self._current_ue_root)
         self._refresh_view()
+        log.info("Backup loaded: %s (%d plugins restored)", path, count)
         QMessageBox.information(self, "Backup Loaded", f"Restored {count} plugin states from backup.")
 
     def _on_revert_changes(self):
@@ -607,6 +620,7 @@ class PluginManagerTab(QWidget):
             p.snapshot_original()
         self._refresh_view()
         self._update_stats()
+        log.info("Changes reverted for %d plugin(s)", len(self._plugins))
 
     def _on_save_template(self):
         template_dir = self._template_dir()
@@ -615,6 +629,7 @@ class PluginManagerTab(QWidget):
         if not path:
             return
         self._backup.save_template(path, self._plugins)
+        log.info("Template saved: %s", path)
         QMessageBox.information(self, "Template Saved", f"Template saved to:\n{path}")
 
     def _on_load_template(self):
@@ -625,4 +640,5 @@ class PluginManagerTab(QWidget):
             return
         count = self._backup.load_template(path, self._plugins)
         self._refresh_view()
+        log.info("Template loaded: %s (%d plugins enabled)", path, count)
         QMessageBox.information(self, "Template Loaded", f"Applied template: {count} plugins enabled.")

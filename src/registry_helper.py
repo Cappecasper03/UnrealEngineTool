@@ -4,6 +4,10 @@ import os
 import sys
 from typing import List
 
+from logger import get_logger
+
+log = get_logger("registry_helper")
+
 
 def discover_ue_installations() -> List[str]:
     r"""Return a sorted, deduplicated list of discovered UE installation directories.
@@ -32,6 +36,10 @@ def discover_ue_installations() -> List[str]:
             unique.append(p)
 
     unique.sort(key=lambda x: x.lower())
+    log.info("discover_ue_installations: %d unique path(s) found (%d total sources)",
+             len(unique), len(found))
+    for p in unique:
+        log.debug("  %s", p)
     return unique
 
 
