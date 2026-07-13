@@ -222,3 +222,177 @@ class TestDiscoverModuleIntermediates:
             str(tmp_path / "nowhere"), {"MainFrame"}, set(),
         )
         assert results == []
+
+
+class TestFullAddFilesPipeline:
+    """End-to-end: adding source files triggers auto-discovery of binaries + intermediates.
+
+    Replicates the _on_browse() logic from FileEntryDialog without a GUI.
+    """
+
+    @pytest.fixture
+    def fake_ue_root(self, tmp_path) -> str:
+        """Create a UE root with source files, binaries, and intermediates for Core & MainFrame."""
+        ue = tmp_path / "UE_5.7"
+
+        # ── Source files (what the user would browse to) ──
+        srcs = [
+            ue / "Engine" / "Source" / "Runtime" / "Core" / "Private" / "Core.cpp",
+            ue / "Engine" / "Source" / "Editor" / "MainFrame" / "Private" / "MainFrameModule.cpp",
+        ]
+        for s in srcs:
+            s.parent.mkdir(parents=True, exist_ok=True)
+            s.write_text("// source")
+
+        # ── Binaries for Core (4 files) + MainFrame (2 files) ──
+        bin_dir = ue / "Engine" / "Binaries" / "Win64"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for mod, ext in [("Core", ".dll"), ("Core", ".pdb"), ("Core", ".lib"),
+                         ("Core", ".target"), ("MainFrame", ".dll"), ("MainFrame", ".pdb")]:
+            (bin_dir / f"UnrealEditor-{mod}{ext}").write_text("fake")
+        # Non-matching module binary (OtherMod) — should NOT be discovered
+        (bin_dir / "UnrealEditor-OtherMod.dll").write_text("fake")
+
+        # ── Intermediates for Core (generated header) + MainFrame (generated + precompiled) ──
+        base = ue / "Engine" / "Intermediate" / "Build" / "Win64"
+        # Core generated header
+        (base / "UnrealEditor" / "Inc" / "Core" / "UHT" / "CoreTypes.generated.h").parent.mkdir(parents=True, exist_ok=True)
+        (base / "UnrealEditor" / "Inc" / "Core" / "UHT" / "CoreTypes.generated.h").write_text("// gen")
+        # MainFrame generated header
+        (base / "UnrealEditor" / "Inc" / "MainFrame" / "UHT" / "MainFrameModule.generated.h").parent.mkdir(parents=True, exist_ok=True)
+        (base / "UnrealEditor" / "Inc" / "MainFrame" / "UHT" / "MainFrameModule.generated.h").write_text("// gen")
+        # Non-matching stem — should NOT be discovered
+        (base / "UnrealEditor" / "Inc" / "MainFrame" / "UHT" / "OtherThing.generated.h").write_text("// gen")
+        # MainFrame precompiled
+        (base / "UnrealEditor" / "Development" / "MainFrame" / "MainFrameModule.cpp.obj").parent.mkdir(parents=True, exist_ok=True)
+        (base / "UnrealEditor" / "Development" / "MainFrame" / "MainFrameModule.cpp.obj").write_text("// obj")
+        (base / "UnrealEditor" / "Development" / "MainFrame" / "MainFrame.precompiled").write_text("// precomp")
+
+        return str(ue)
+
+    def _simulate_on_browse(self, ue_root: str, paths):
+        """Replicate _on_browse() logic: build entries, extract modules, discover, merge.
+
+        Returns list of path_custom strings from all entries.
+        """
+        from models import EngineFile
+        entries = []
+        all_ue_roots = set()
+        version_dir = ""
+
+        # Phase 1: user-picked entries
+        for path in sorted(paths):
+            rel = _relativise(path, version_dir)
+            entries.append(EngineFile(path_custom=rel, path_default="", path_target=rel,
+                                       local_name=os.path.basename(rel)))
+            ue_root_found = _find_engine_root(path)
+            if ue_root_found:
+                all_ue_roots.add(ue_root_found)
+
+        # Phase 2: extract modules and source stems
+        source_modules = set()
+        source_stems = set()
+        for e in entries:
+            rel = e.path_custom
+            mod = _module_name_from_path(rel)
+            if mod:
+                source_modules.add(mod)
+            if rel.lower().startswith("engine/source/"):
+                stem = os.path.splitext(os.path.basename(rel))[0]
+                if stem:
+                    source_stems.add(stem)
+
+        # Phase 3: auto-discover binaries and intermediates
+        for root in all_ue_roots:
+            for rel_path, abs_path in _discover_binaries(root, source_modules):
+                if not any(e.path_custom == rel_path for e in entries):
+                    entries.append(EngineFile(path_custom=rel_path, path_default="",
+                                               path_target=rel_path,
+                                               local_name=os.path.basename(rel_path)))
+            for rel_path, abs_path in _discover_module_intermediates(root, source_modules, source_stems):
+                if not any(e.path_custom == rel_path for e in entries):
+                    entries.append(EngineFile(path_custom=rel_path, path_default="",
+                                               path_target=rel_path,
+                                               local_name=os.path.basename(rel_path)))
+
+        return [e.path_custom for e in entries]
+
+    def test_user_files_present(self, fake_ue_root):
+        """User-picked source files always appear in results."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.cpp"),
+            os.path.join(fake_ue_root, "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        assert "Engine/Source/Runtime/Core/Private/Core.cpp" in paths
+        assert "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp" in paths
+
+    def test_core_binaries_auto_discovered(self, fake_ue_root):
+        """Core module source should pull in Core's .dll, .pdb, .lib, .target."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        for ext in [".dll", ".pdb", ".lib", ".target"]:
+            assert f"Engine/Binaries/Win64/UnrealEditor-Core{ext}" in paths, \
+                f"Missing Core binary: {ext}"
+
+    def test_mainframe_binaries_auto_discovered(self, fake_ue_root):
+        """MainFrame module source should pull in MainFrame binaries."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        assert "Engine/Binaries/Win64/UnrealEditor-MainFrame.dll" in paths
+        assert "Engine/Binaries/Win64/UnrealEditor-MainFrame.pdb" in paths
+
+    def test_non_matching_module_not_discovered(self, fake_ue_root):
+        """OtherMod binary should not appear when user only picks Core/MainFrame files."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        assert all("OtherMod" not in p for p in paths)
+
+    def test_intermediates_discovered_with_stem_filter(self, fake_ue_root):
+        """Generated headers matching the source file's stem should appear."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        # MainFrameModule.cpp should pull in MainFrameModule.generated.h
+        assert any("MainFrameModule.generated.h" in p for p in paths)
+        # OtherThing.generated.h has a different stem — should NOT appear
+        assert all("OtherThing.generated.h" not in p for p in paths)
+
+    def test_two_modules_combined(self, fake_ue_root):
+        """Picking sources from two modules discovers binaries+intermediates for both."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.cpp"),
+            os.path.join(fake_ue_root, "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        assert "Engine/Binaries/Win64/UnrealEditor-Core.dll" in paths
+        assert "Engine/Binaries/Win64/UnrealEditor-MainFrame.dll" in paths
+        # Precompiled files for MainFrame
+        assert any("MainFrameModule.cpp.obj" in p for p in paths)
+
+    def test_precompiled_files_discovered(self, fake_ue_root):
+        """MainFrame source should pull in .cpp.obj and .precompiled files."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Editor/MainFrame/Private/MainFrameModule.cpp"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        assert any(p.endswith(".cpp.obj") for p in paths)
+        assert any(p.endswith(".precompiled") for p in paths)
+
+    def test_no_duplicate_binaries_from_same_module(self, fake_ue_root):
+        """Two source files in the same module should not double-add binaries."""
+        src_files = [
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.cpp"),
+            os.path.join(fake_ue_root, "Engine/Source/Runtime/Core/Private/Core.h"),
+        ]
+        paths = self._simulate_on_browse(fake_ue_root, src_files)
+        # Core.dll should appear exactly once
+        count = sum(1 for p in paths if p == "Engine/Binaries/Win64/UnrealEditor-Core.dll")
+        assert count == 1, f"Core.dll appears {count} times instead of 1"
