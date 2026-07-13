@@ -22,11 +22,11 @@ TEST_ENGINES = PROJECT_ROOT / "tests" / "test-data"
 
 # Patches are stored under LOCALAPPDATA
 _PATCHES_ROOT = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / "UnrealEngineTool" / "patches"
+TEST_DATA = PROJECT_ROOT / "tests" / "test-data"
 
-# Test engine fixture directories
-ORIGINAL_DIR = TEST_ENGINES / "UE_5.7-Original"
-CUSTOM_DIR = TEST_ENGINES / "UE_5.7-Custom"
-UE_INSTALL_DIR = TEST_ENGINES / "UE_5.7"
+ORIGINAL_DIR = TEST_DATA / "UE_5.7-Original"
+CUSTOM_DIR = TEST_DATA / "UE_5.7-Custom"
+UE_INSTALL_DIR = TEST_DATA / "UE_5.7"
 
 # Patch info
 PATCH_NAME = "UE_5.7-Test"
