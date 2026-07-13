@@ -42,10 +42,10 @@ class BackupManager:
                 continue
             # Extract relative path if it's absolute
             if trimmed.startswith(plugins_root):
-                rel = os.path.relpath(trimmed, plugins_root)
+                rel = os.path.relpath(trimmed, plugins_root).replace("\\", "/")
                 enabled_paths.add(rel)
             else:
-                enabled_paths.add(trimmed)
+                enabled_paths.add(trimmed.replace("\\", "/"))
 
         count = 0
         for p in plugins:

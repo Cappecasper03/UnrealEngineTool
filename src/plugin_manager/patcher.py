@@ -1,7 +1,7 @@
 """Applies changes to .uplugin files on disk: toggles EnabledByDefault and Installed."""
 
+import json
 import os
-import re
 from typing import Dict, List, Optional
 
 from models import PluginData
@@ -49,84 +49,14 @@ class UPluginPatcher:
         self._unset_readonly(file_path)
 
         with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            data = json.load(f)
 
-        new_lines: List[str] = []
-        ebd_found = False
-        installed_found = False
-        modules_found = False
-
-        new_ebd = plugin.enabled_by_default
-        orig_ebd_str = str(original.enabled_by_default).lower() if original else "false"
-        new_ebd_str = str(new_ebd).lower()
-
-        new_installed = plugin.installed
-        orig_installed_str = str(original.installed).lower() if original else "false"
-        new_installed_str = str(new_installed).lower()
-
-        for line in lines:
-            # Find and replace EnabledByDefault
-            ok, replaced = self._try_replace_json_value(
-                line, "EnabledByDefault", orig_ebd_str, new_ebd_str
-            )
-            if ok:
-                new_lines.append(replaced)
-                ebd_found = True
-                continue
-
-            # Find and replace Installed
-            ok, replaced = self._try_replace_json_value(
-                line, "Installed", orig_installed_str, new_installed_str
-            )
-            if ok:
-                new_lines.append(replaced)
-                installed_found = True
-                continue
-
-            # Track the "Modules" line for injection
-            if not modules_found and line.strip().startswith('"Modules"'):
-                modules_found = True
-                indent = len(line) - len(line.lstrip())
-
-                # Inject missing fields before Modules
-                if not ebd_found:
-                    new_lines.append(f"{' ' * indent}\"EnabledByDefault\": {new_ebd_str},\n")
-                    ebd_found = True
-                if not installed_found:
-                    new_lines.append(f"{' ' * indent}\"Installed\": {new_installed_str},\n")
-                    installed_found = True
-
-                new_lines.append(line)
-                continue
-
-            new_lines.append(line)
+        data["EnabledByDefault"] = plugin.enabled_by_default
+        data["Installed"] = plugin.installed
 
         with open(file_path, "w", encoding="utf-8") as f:
-            f.writelines(new_lines)
-
-    @staticmethod
-    def _try_replace_json_value(
-        line: str, key: str, old_value: str, new_value: str
-    ) -> tuple:
-        """Try to replace a JSON key-value pair on a single line."""
-        pattern = rf'("{key}":\s*){re.escape(old_value)}(,?)'
-        match = re.search(pattern, line, re.IGNORECASE)
-        if match:
-            result = (
-                line[: match.start()]
-                + match.group(1)
-                + new_value
-                + match.group(2)
-                + line[match.end():]
-            )
-            return True, result
-
-        # Check if key already exists
-        exists_pattern = rf'"{key}"\s*:'
-        if re.search(exists_pattern, line):
-            return True, line  # Already has the key with a different value — skip
-
-        return False, line
+            json.dump(data, f, indent=2)
+            f.write("\n")
 
     @staticmethod
     def _unset_readonly(file_path: str):

@@ -107,4 +107,6 @@ class UPluginScanner:
         except (json.JSONDecodeError, OSError) as e:
             data.description = f"[Parse error: {e}]"
 
+        data.snapshot_original()
+
         return data
