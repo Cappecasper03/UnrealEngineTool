@@ -1,15 +1,18 @@
 """Application-wide logger — writes to file (always) and stdout (CLI mode).
 
 Log file: %LOCALAPPDATA%/UnrealEngineTool/logs/UnrealEngineTool.log
-A rotating UE5-style scheme is used:
-  - The active log is always UnrealEngineTool.log
-  - On startup, any existing UnrealEngineTool.log is renamed to
-    UnrealEngineTool-backup-YYYY.MM.DD-HH.MM.SS.log
+A copy-and-clear rotation scheme is used:
+  - The active log is always UnrealEngineTool.log (same file entry).
+  - On startup, any existing UnrealEngineTool.log is COPIED to
+    UnrealEngineTool-backup-YYYY.MM.DD-HH.MM.SS.log, then the original
+    file is truncated.  Because the same file entry stays open, text
+    editors/viewers tailing the log don't need to re-open or switch files.
 CLI mode adds a stdout handler for interactive use.
 """
 
 import logging
 import os
+import shutil
 import sys
 from datetime import datetime
 from typing import Optional
@@ -50,7 +53,11 @@ def _backup_timestamp() -> str:
 
 
 def _rotate_existing_log(log_dir: str) -> None:
-    """Rename an existing UnrealEngineTool.log to a backup if it exists."""
+    """Copy an existing UnrealEngineTool.log to a backup, then truncate the original.
+
+    Copying instead of renaming keeps the same file entry active so that text
+    editors/viewers tailing the log can continue watching the same file.
+    """
     active_path = os.path.join(log_dir, _LOG_FILENAME + _LOG_EXT)
     if not os.path.isfile(active_path):
         return
@@ -58,7 +65,10 @@ def _rotate_existing_log(log_dir: str) -> None:
     backup_name = f"{_LOG_FILENAME}-backup-{ts}{_LOG_EXT}"
     backup_path = os.path.join(log_dir, backup_name)
     try:
-        os.replace(active_path, backup_path)
+        shutil.copy2(active_path, backup_path)
+        # Truncate the active file in-place (same file entry)
+        with open(active_path, "w") as f:
+            pass
     except OSError:
         # If we can't rotate (permissions, etc.), just overwrite the file
         pass
@@ -67,7 +77,8 @@ def _rotate_existing_log(log_dir: str) -> None:
 def _init():
     """One-time initialisation of the file log handler.
 
-    Rotates any existing log file to a backup before creating the new one.
+    Copies any existing log to a timestamped backup, then truncates the
+    active file so the same file entry stays valid for viewers.
     """
     global _FILE_HANDLER, _INITIALISED, _LOG_DIR
     if _INITIALISED:
