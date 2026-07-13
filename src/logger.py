@@ -74,9 +74,18 @@ def _rotate_existing_log(log_dir: str) -> None:
 
     Copying instead of renaming keeps the same file entry active so that text
     editors/viewers tailing the log can continue watching the same file.
+
+    Skips rotation if the active file is empty or if UNREAL_ENGINE_TOOL_TEST
+    is set (avoids creating pointless backups from test subprocesses).
     """
     active_path = os.path.join(log_dir, _LOG_FILENAME + _LOG_EXT)
     if not os.path.isfile(active_path):
+        return
+    # Don't back up an empty file (already truncated by a previous init)
+    if os.path.getsize(active_path) == 0:
+        return
+    # Skip rotation in test subprocesses
+    if os.environ.get("UNREAL_ENGINE_TOOL_TEST"):
         return
     ts = _backup_timestamp()
     backup_name = f"{_LOG_FILENAME}-backup-{ts}{_LOG_EXT}"

@@ -1,5 +1,6 @@
 """Tests for the headless CLI — runs via subprocess to exercise main.py dispatch."""
 
+import os
 import subprocess
 import sys
 
@@ -12,9 +13,11 @@ from .conftest import (
 
 def run(*args: str) -> tuple:
     """Run the tool via subprocess and return (rc, stdout, stderr)."""
+    env = {**os.environ, "UNREAL_ENGINE_TOOL_TEST": "1"}
     result = subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "src" / "main.py"), *args],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+        env=env,
     )
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 

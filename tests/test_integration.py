@@ -1,5 +1,6 @@
 """End-to-end integration tests — full workflow: apply custom, verify, revert, verify."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,9 +19,11 @@ from .conftest import (
 
 def run(*args: str) -> tuple:
     """Run via subprocess (exercises main.py dispatch)."""
+    env = {**os.environ, "UNREAL_ENGINE_TOOL_TEST": "1"}
     result = subprocess.run(
         [sys.executable, str(PROJECT_ROOT / "src" / "main.py"), *args],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+        env=env,
     )
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
