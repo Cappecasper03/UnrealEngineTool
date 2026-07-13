@@ -5,7 +5,10 @@ A desktop application for managing Unreal Engine plugins and custom engine versi
 Built with PySide6.
 
 Usage:
-    python src/main.py
+    python src/main.py                          # GUI mode
+    python src/main.py --cli list               # Headless: list versions
+    python src/main.py --cli apply-custom <ver> <dir>   # Headless: apply custom
+    python src/main.py --cli apply-default <ver> <dir>  # Headless: revert
 """
 
 import sys
@@ -14,49 +17,25 @@ import os
 # Ensure the src directory is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QTabWidget,
-    QVBoxLayout, QWidget,
-)
-
-from theme import apply_theme
-from plugin_manager_tab import PluginManagerTab
-from patcher_tab import PatcherTab
-
-
-class MainWindow(QMainWindow):
-    """Main application window with tabbed UI."""
-
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Unreal Engine Tool")
-        self.setMinimumSize(1024, 680)
-        self.resize(1300, 820)
-
-        # Central widget
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        # Tab container
-        self._tabs = QTabWidget()
-        self._tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self._tabs.setDocumentMode(True)
-        self._tabs.setMovable(False)
-
-        # Create tabs
-        self._plugin_tab = PluginManagerTab()
-        self._patcher_tab = PatcherTab()
-
-        self._tabs.addTab(self._plugin_tab, "  Plugin Manager  ")
-        self._tabs.addTab(self._patcher_tab, "  Patcher  ")
-
-        layout.addWidget(self._tabs, 1)
-
 
 def main():
+    """Entry point — dispatches to GUI or headless CLI."""
+
+    # ── Headless CLI mode ──
+    if len(sys.argv) >= 2 and sys.argv[1] == "--cli":
+        from patcher_cli import main as cli_main
+        sys.exit(cli_main(sys.argv[2:]))
+
+    # ── GUI mode ──
+    from PySide6.QtWidgets import (
+        QApplication, QMainWindow, QTabWidget,
+        QVBoxLayout, QWidget,
+    )
+
+    from theme import apply_theme
+    from plugin_manager_tab import PluginManagerTab
+    from patcher_tab import PatcherTab
+
     app = QApplication(sys.argv)
 
     # Apply UE5 Editor dark theme
@@ -64,6 +43,37 @@ def main():
 
     # Fusion is the most QSS-compatible style
     app.setStyle("Fusion")
+
+    class MainWindow(QMainWindow):
+        """Main application window with tabbed UI."""
+
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("Unreal Engine Tool")
+            self.setMinimumSize(1024, 680)
+            self.resize(1300, 820)
+
+            # Central widget
+            central = QWidget()
+            self.setCentralWidget(central)
+            layout = QVBoxLayout(central)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+
+            # Tab container
+            self._tabs = QTabWidget()
+            self._tabs.setTabPosition(QTabWidget.TabPosition.North)
+            self._tabs.setDocumentMode(True)
+            self._tabs.setMovable(False)
+
+            # Create tabs
+            self._plugin_tab = PluginManagerTab()
+            self._patcher_tab = PatcherTab()
+
+            self._tabs.addTab(self._plugin_tab, "  Plugin Manager  ")
+            self._tabs.addTab(self._patcher_tab, "  Patcher  ")
+
+            layout.addWidget(self._tabs, 1)
 
     window = MainWindow()
     window.show()
