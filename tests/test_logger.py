@@ -28,8 +28,7 @@ class TestLoggerInit:
         l = get_logger("test_path")
         p = log_path()
         assert p != ""
-        assert "unrealenginetool_" in p
-        assert ".log" in p
+        assert "UnrealEngineTool.log" in p
         assert _log_dir().lower() in p.lower()
 
     def test_same_logger_returns_same_file(self):

@@ -1,14 +1,17 @@
 """Application-wide logger — writes to file (always) and stdout (CLI mode).
 
-Log file: %LOCALAPPDATA%/UnrealEngineTool/logs/unrealenginetool_<timestamp>.log
-A new file is created per session. CLI mode adds a stdout handler for interactive use.
+Log file: %LOCALAPPDATA%/UnrealEngineTool/logs/UnrealEngineTool.log
+A rotating UE5-style scheme is used:
+  - The active log is always UnrealEngineTool.log
+  - On startup, any existing UnrealEngineTool.log is renamed to
+    UnrealEngineTool-backup-YYYY.MM.DD-HH.MM.SS.log
+CLI mode adds a stdout handler for interactive use.
 """
 
 import logging
 import os
 import sys
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
 from typing import Optional
 
 _LOG_DIR: Optional[str] = None
@@ -19,7 +22,8 @@ _INITIALISED = False
 _FORMAT = "%(asctime)s  %(levelname)-5s  %(name)s  %(message)s"
 _DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
-_LOG_PREFIX = "unrealenginetool"
+_LOG_FILENAME = "UnrealEngineTool"
+_LOG_EXT = ".log"
 
 
 def _default_log_dir() -> str:
@@ -40,20 +44,37 @@ def default_patches_root() -> str:
     )
 
 
-def _session_timestamp() -> str:
-    """Return a compact, sortable timestamp for this session."""
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+def _backup_timestamp() -> str:
+    """Return a UE5-style backup timestamp: YYYY.MM.DD-HH.MM.SS."""
+    return datetime.now().strftime("%Y.%m.%d-%H.%M.%S")
+
+
+def _rotate_existing_log(log_dir: str) -> None:
+    """Rename an existing UnrealEngineTool.log to a backup if it exists."""
+    active_path = os.path.join(log_dir, _LOG_FILENAME + _LOG_EXT)
+    if not os.path.isfile(active_path):
+        return
+    ts = _backup_timestamp()
+    backup_name = f"{_LOG_FILENAME}-backup-{ts}{_LOG_EXT}"
+    backup_path = os.path.join(log_dir, backup_name)
+    try:
+        os.replace(active_path, backup_path)
+    except OSError:
+        # If we can't rotate (permissions, etc.), just overwrite the file
+        pass
 
 
 def _init():
-    """One-time initialisation of the file log handler."""
+    """One-time initialisation of the file log handler.
+
+    Rotates any existing log file to a backup before creating the new one.
+    """
     global _FILE_HANDLER, _INITIALISED, _LOG_DIR
     if _INITIALISED:
         return
 
     log_dir = _default_log_dir()
-    ts = _session_timestamp()
-    log_path = os.path.join(log_dir, f"{_LOG_PREFIX}_{ts}.log")
+    log_path_ = os.path.join(log_dir, _LOG_FILENAME + _LOG_EXT)
 
     # Create directory if needed
     _LOG_DIR = log_dir
@@ -62,9 +83,15 @@ def _init():
             os.makedirs(_LOG_DIR, exist_ok=True)
         except OSError:
             _LOG_DIR = os.path.expanduser("~")
-            log_path = os.path.join(_LOG_DIR, f"{_LOG_PREFIX}_{ts}.log")
+            log_path_ = os.path.join(_LOG_DIR, _LOG_FILENAME + _LOG_EXT)
+        else:
+            # Directory was just created — nothing to rotate
+            pass
+    else:
+        # Directory exists — rotate old log if present
+        _rotate_existing_log(_LOG_DIR)
 
-    _FILE_HANDLER = logging.FileHandler(log_path, encoding="utf-8")
+    _FILE_HANDLER = logging.FileHandler(log_path_, encoding="utf-8")
     _FILE_HANDLER.setLevel(logging.DEBUG)
     _FILE_HANDLER.setFormatter(logging.Formatter(_FORMAT, _DATE_FMT))
 

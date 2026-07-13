@@ -51,8 +51,7 @@ class TestDispatch:
     def test_log_path(self):
         rc, out, _ = run("log-path")
         assert rc == 0
-        assert "unrealenginetool_" in out
-        assert ".log" in out
+        assert "UnrealEngineTool.log" in out
 
     def test_aliases(self):
         rc, out, _ = run("apply", VERSION_NAME, str(UE_INSTALL_DIR))
