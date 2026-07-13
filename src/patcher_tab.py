@@ -18,9 +18,9 @@ from theme import (
     C_TEXT_DIM, C_TEXT_BRIGHT, C_ACCENT_RED,
     C_CARD, C_CARD_BORDER,
 )
-from patcher.version_io import discover_versions
+from patcher.patch_io import discover_patches
 from patcher.file_patcher import FilePatcher, PatchResult
-from patcher.version_dialog import VersionManagerDialog
+from patcher.patch_dialog import PatchManagerDialog
 from logger import get_logger
 
 log = get_logger("patcher_tab")
@@ -82,10 +82,10 @@ class PatcherTab(QWidget):
         self._file_patcher = FilePatcher()
         self._patch_finished.connect(self._finish_apply)
 
-        self._versions: List[EngineInfo] = []
+        self._patches: List[EngineInfo] = []
         self._current_ue_root = ""
         self._is_working = False
-        self._versions_root = os.path.normpath(
+        self._patches_root = os.path.normpath(
             os.path.join(
                 os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
                 "UnrealEngineTool", "patches",
@@ -93,7 +93,7 @@ class PatcherTab(QWidget):
         )
 
         self._build_ui()
-        self._discover_versions()
+        self._discover_patches()
         self._discover_paths()
 
     # ── UI Setup ──
@@ -136,21 +136,21 @@ class PatcherTab(QWidget):
         patch_label.setStyleSheet("background: transparent;")
         patch_row.addWidget(patch_label)
 
-        self._version_picker = QComboBox()
-        self._version_picker.setMinimumWidth(200)
-        self._version_picker.setStyleSheet(self._COMBO_QSS)
-        self._version_picker.currentIndexChanged.connect(self._on_version_selected)
-        patch_row.addWidget(self._version_picker, 1)
+        self._patch_picker = QComboBox()
+        self._patch_picker.setMinimumWidth(200)
+        self._patch_picker.setStyleSheet(self._COMBO_QSS)
+        self._patch_picker.currentIndexChanged.connect(self._on_patch_selected)
+        patch_row.addWidget(self._patch_picker, 1)
 
         self._manage_btn = QPushButton("Manage")
         self._manage_btn.setObjectName("toolBtn")
-        self._manage_btn.clicked.connect(self._on_manage_versions)
+        self._manage_btn.clicked.connect(self._on_manage_patches)
         patch_row.addWidget(self._manage_btn)
 
-        self._version_count_label = QLabel("")
-        self._version_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._version_count_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; background: transparent;")
-        patch_row.addWidget(self._version_count_label)
+        self._patch_count_label = QLabel("")
+        self._patch_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._patch_count_label.setStyleSheet(f"color: {C_TEXT_DIM}; font-size: 12px; background: transparent;")
+        patch_row.addWidget(self._patch_count_label)
 
         c2.addLayout(patch_row)
 
@@ -171,7 +171,7 @@ class PatcherTab(QWidget):
 
         self._changelog = QPlainTextEdit()
         self._changelog.setReadOnly(True)
-        self._changelog.setPlaceholderText("Select a version to view its changelog\u2026")
+        self._changelog.setPlaceholderText("Select a patch to view its changelog\u2026")
         self._changelog.setMinimumHeight(100)
         c3.addWidget(self._changelog, 1)
 
@@ -288,8 +288,8 @@ class PatcherTab(QWidget):
             self._update_apply_buttons()
             return
 
-        # Detect what version is currently applied
-        applied = FilePatcher.detect_applied_version(ue_dir, self._versions)
+        # Detect what patch is currently applied
+        applied = FilePatcher.detect_applied_version(ue_dir, self._patches)
         if applied:
             self._applied_version_label.setStyleSheet(
                 f"color: {C_ACCENT_GREEN}; font-weight: 600; background: transparent;"
@@ -299,31 +299,31 @@ class PatcherTab(QWidget):
             self._applied_version_label.setStyleSheet(
                 f"color: {C_TEXT_DIM}; background: transparent;"
             )
-            self._applied_version_label.setText("No version applied")
+            self._applied_version_label.setText("No patch applied")
 
         self._update_apply_buttons()
 
-    # ── Version Discovery ──
+    # ── Patch Discovery ──
 
-    def _discover_versions(self):
-        self._version_picker.blockSignals(True)
-        self._version_picker.clear()
+    def _discover_patches(self):
+        self._patch_picker.blockSignals(True)
+        self._patch_picker.clear()
         self._changelog.clear()
 
         try:
-            self._versions = discover_versions(self._versions_root)
-            if self._versions:
-                log.info("Discovered %d version(s) from %s", len(self._versions), self._versions_root)
-                for v in self._versions:                  
-                    self._version_picker.addItem(f"{v.engine_version}  ({v.unreal_dir})" if v.unreal_dir else v.engine_version)
-                self._version_picker.setCurrentIndex(len(self._versions) - 1)
-                self._on_version_selected(len(self._versions) - 1)
-                self._version_count_label.setText(f"{len(self._versions)} patch(es)")
+            self._patches = discover_patches(self._patches_root)
+            if self._patches:
+                log.info("Discovered %d patch(es) from %s", len(self._patches), self._patches_root)
+                for p in self._patches:
+                    self._patch_picker.addItem(f"{p.patch_name}  ({p.unreal_dir})" if p.unreal_dir else p.patch_name)
+                self._patch_picker.setCurrentIndex(len(self._patches) - 1)
+                self._on_patch_selected(len(self._patches) - 1)
+                self._patch_count_label.setText(f"{len(self._patches)} patch(es)")
             else:
-                self._version_count_label.setText("No patches found")
+                self._patch_count_label.setText("No patches found")
                 self._changelog.setPlainText(
                     "No patches discovered.\n\n"
-                    f"Place patch folders under:\n{self._versions_root}\n\n"
+                    f"Place patch folders under:\n{self._patches_root}\n\n"
                     "Each folder should contain an info.dat file with patch data."
                 )
 
@@ -331,51 +331,51 @@ class PatcherTab(QWidget):
             self._on_ue_dir_changed()
 
         except Exception as e:
-            log.error("Error discovering versions from %s: %s", self._versions_root, e)
+            log.error("Error discovering patches from %s: %s", self._patches_root, e)
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
-            self._status_label.setText(f"Error discovering versions: {e}")
+            self._status_label.setText(f"Error discovering patches: {e}")
 
-        self._version_picker.blockSignals(False)
+        self._patch_picker.blockSignals(False)
 
     # ── Event Handlers ──
 
-    def _on_version_selected(self, idx: int):
-        if idx < 0 or idx >= len(self._versions):
-            self._changelog.setPlainText("No version selected.")
+    def _on_patch_selected(self, idx: int):
+        if idx < 0 or idx >= len(self._patches):
+            self._changelog.setPlainText("No patch selected.")
             return
 
-        version = self._versions[idx]
+        patch = self._patches[idx]
 
         # Build changelog with parent inheritance
         text_parts = []
-        if version.changelog:
-            text_parts.append(f"{version.changelog}\n")
+        if patch.changelog:
+            text_parts.append(f"{patch.changelog}\n")
 
-        parent_version = version.parent_version
+        parent_patch = patch.parent_patch
         visited = set()
-        while parent_version and parent_version.lower() not in visited:
-            visited.add(parent_version.lower())
+        while parent_patch and parent_patch.lower() not in visited:
+            visited.add(parent_patch.lower())
             parent = next(
-                (v for v in self._versions if v.engine_version.lower() == parent_version.lower()),
+                (p for p in self._patches if p.patch_name.lower() == parent_patch.lower()),
                 None,
             )
             if not parent:
                 break
-            text_parts.append(f"\n--- Previous: {parent.engine_version} ---\n{parent.changelog}\n")
-            parent_version = parent.parent_version
+            text_parts.append(f"\n--- Previous: {parent.patch_name} ---\n{parent.changelog}\n")
+            parent_patch = parent.parent_patch
 
         self._changelog.setPlainText("".join(text_parts))
         self._changelog.verticalScrollBar().setValue(0)
         self._update_apply_buttons()
 
     def _on_apply(self, custom_engine: bool):
-        idx = self._version_picker.currentIndex()
-        if idx < 0 or idx >= len(self._versions):
+        idx = self._patch_picker.currentIndex()
+        if idx < 0 or idx >= len(self._patches):
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
-            self._status_label.setText("No version selected.")
+            self._status_label.setText("No patch selected.")
             return
 
-        version = self._versions[idx]
+        patch = self._patches[idx]
         ue_dir = self._current_ue_root
 
         if not ue_dir or not os.path.isdir(ue_dir):
@@ -386,13 +386,13 @@ class PatcherTab(QWidget):
         if custom_engine:
             msg = (
                 f"This will copy engine files to:\n{ue_dir}\n\n"
-                f"Version: {version.engine_version} (UE {version.unreal_version})\n\n"
+                f"Patch: {patch.patch_name} (UE {patch.unreal_version})\n\n"
                 "This modifies your UE installation. Continue?"
             )
         else:
             msg = (
                 f"This will revert engine files to defaults at:\n{ue_dir}\n\n"
-                f"Version: {version.engine_version} (UE {version.unreal_version})\n\n"
+                f"Patch: {patch.patch_name} (UE {patch.unreal_version})\n\n"
                 "This modifies your UE installation. Continue?"
             )
 
@@ -405,40 +405,40 @@ class PatcherTab(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._do_apply(custom_engine, version, ue_dir)
+        self._do_apply(custom_engine, patch, ue_dir)
 
-    def _do_apply(self, custom_engine: bool, version: EngineInfo, ue_dir: str):
+    def _do_apply(self, custom_engine: bool, patch: EngineInfo, ue_dir: str):
         self._is_working = True
         self._set_buttons_enabled(False)
 
         action_label = "custom" if custom_engine else "default"
-        log.info("GUI apply start: %s version=%s target=%s", action_label, version.engine_version, ue_dir)
+        log.info("GUI apply start: %s patch=%s target=%s", action_label, patch.patch_name, ue_dir)
 
         self._operation_label.setText("Applying custom engine\u2026" if custom_engine else "Reverting to default\u2026")
         self._operation_label.setVisible(True)
         self._operation_progress.setVisible(True)
 
-        ver_name = version.engine_version
+        p_name = patch.patch_name
 
         def work():
             try:
                 if custom_engine:
                     result = self._file_patcher.apply_custom(
-                        version, self._versions, ue_dir, self._versions_root, False,
+                        patch, self._patches, ue_dir, self._patches_root, False,
                     )
                 else:
                     result = self._file_patcher.apply_default(
-                        version, self._versions, ue_dir, self._versions_root, False,
+                        patch, self._patches, ue_dir, self._patches_root, False,
                     )
             except Exception as e:
                 result = PatchResult(success=False, message=str(e))
 
-            self._patch_finished.emit(result, ver_name)
+            self._patch_finished.emit(result, p_name)
 
         thread = threading.Thread(target=work, daemon=True)
         thread.start()
 
-    def _finish_apply(self, result: PatchResult, version_name: str):
+    def _finish_apply(self, result: PatchResult, patch_name: str):
         self._operation_label.setVisible(False)
         self._operation_progress.setVisible(False)
         self._is_working = False
@@ -454,17 +454,17 @@ class PatcherTab(QWidget):
             self._status_label.setStyleSheet(f"color: {C_ACCENT_RED}; font-size: 12px;")
             self._status_label.setText(f"Failed: {result.message}")
 
-    def _on_manage_versions(self):
-        """Open the Version Manager dialog."""
-        dlg = VersionManagerDialog(self, versions_root=self._versions_root)
+    def _on_manage_patches(self):
+        """Open the Patch Manager dialog."""
+        dlg = PatchManagerDialog(self, versions_root=self._patches_root)
         dlg.exec()
-        # Re-discover versions regardless of changes (handles external edits too)
-        self._discover_versions()
+        # Re-discover patches regardless of changes (handles external edits too)
+        self._discover_patches()
 
     # ── Helpers ──
 
     def _update_apply_buttons(self):
-        has_version = 0 <= self._version_picker.currentIndex() < len(self._versions)
+        has_version = 0 <= self._patch_picker.currentIndex() < len(self._patches)
         has_dir = bool(self._current_ue_root) and os.path.isdir(self._current_ue_root)
         self._apply_custom_btn.setEnabled(has_version and has_dir and not self._is_working)
         self._apply_default_btn.setEnabled(has_version and has_dir and not self._is_working)
@@ -475,4 +475,4 @@ class PatcherTab(QWidget):
         self._manage_btn.setEnabled(enabled)
         self._browse_btn.setEnabled(enabled)
         self._ue_folder_combo.setEnabled(enabled)
-        self._version_picker.setEnabled(enabled)
+        self._patch_picker.setEnabled(enabled)

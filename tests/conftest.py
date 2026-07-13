@@ -28,8 +28,8 @@ ORIGINAL_DIR = TEST_ENGINES / "UE_5.7-Original"
 CUSTOM_DIR = TEST_ENGINES / "UE_5.7-Custom"
 UE_INSTALL_DIR = TEST_ENGINES / "UE_5.7"
 
-# Version info
-VERSION_NAME = "UE_5.7-Test"
+# Patch info
+PATCH_NAME = "UE_5.7-Test"
 
 SCRIPT = PROJECT_ROOT / "src" / "main.py"
 
@@ -99,12 +99,12 @@ def marker_file() -> Path:
 
 
 @pytest.fixture
-def version_name() -> str:
-    return VERSION_NAME
+def patch_name() -> str:
+    return PATCH_NAME
 
 
 @pytest.fixture
-def versions_root() -> Path:
+def patches_root() -> Path:
     return _PATCHES_ROOT
 
 
@@ -122,20 +122,20 @@ def _ensure_clean_state():
 
 
 def pytest_sessionstart():
-    """Auto-create the test patch version metadata and seed custom files before the session begins.
+    """Auto-create the test patch metadata and seed custom files before the session begins.
 
     This makes the test suite fully self-contained — no external fixtures needed.
     """
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
-    from patcher.version_io import create_version, write_info
+    from patcher.patch_io import create_patch, write_info
     from models import EngineFile
 
-    ver_dir = _PATCHES_ROOT / VERSION_NAME
+    ver_dir = _PATCHES_ROOT / PATCH_NAME
     # Remove any stale leftover from a previous run
     if ver_dir.is_dir():
         shutil.rmtree(str(ver_dir), onerror=_remove_readonly)
 
-    ver = create_version(str(_PATCHES_ROOT), VERSION_NAME, unreal_version="5.7")
+    ver = create_patch(str(_PATCHES_ROOT), PATCH_NAME, unreal_version="5.7")
 
     target_rel = "Engine/Source/Editor/MainFrame/Private/HomeScreen/SHomeScreen.cpp"
     ver.files.append(EngineFile(
@@ -166,8 +166,8 @@ def _remove_readonly(func, path, exc_info):
 
 
 def pytest_sessionfinish():
-    """Clean up the test patch version after the session ends."""
-    ver_dir = _PATCHES_ROOT / VERSION_NAME
+    """Clean up the test patch after the session ends."""
+    ver_dir = _PATCHES_ROOT / PATCH_NAME
     if ver_dir.is_dir():
         try:
             shutil.rmtree(str(ver_dir), onerror=_remove_readonly)

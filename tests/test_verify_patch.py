@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from verify_patch import verify, md5
 from patcher.file_patcher import FilePatcher
-from patcher.version_io import create_version
+from patcher.patch_io import create_patch
 from models import EngineFile
 
 
@@ -42,7 +42,7 @@ class TestVerifyFunction:
     def test_marker_mismatch(self, tmp_path):
         """Expected version doesn't match the marker file."""
         FilePatcher.write_marker(str(tmp_path), "applied-v1")
-        # Override patches root to empty so discover_versions returns []
+        # Override patches root to empty so discover_patches returns []
         from logger import default_patches_root
         import logging
         logging.getLogger("unrealenginetool.verify_patch").setLevel(logging.CRITICAL)
@@ -60,34 +60,34 @@ class TestVerifyFunction:
     def test_no_files_to_verify(self, tmp_path):
         """Version with no file entries should pass."""
         import verify_patch as vp
-        original_get_root = vp._get_versions_root
-        vp._get_versions_root = lambda: str(tmp_path)
+        original_get_root = vp._get_patches_root
+        vp._get_patches_root = lambda: str(tmp_path)
 
-        from patcher.version_io import create_version
-        ver = create_version(str(tmp_path), "EmptyVersion")
+        from patcher.patch_io import create_patch
+        ver = create_patch(str(tmp_path), "EmptyVersion")
         try:
             FilePatcher.write_marker(str(tmp_path), "EmptyVersion")
             ok, msg = vp.verify(str(tmp_path), "EmptyVersion", verbose=False)
             assert ok is True
             assert "no file entries" in msg
         finally:
-            vp._get_versions_root = original_get_root
+            vp._get_patches_root = original_get_root
 
     def test_files_match(self, tmp_path):
         """All file hashes match — passes."""
         import verify_patch as vp
-        original_get_root = vp._get_versions_root
-        vp._get_versions_root = lambda: str(tmp_path)
+        original_get_root = vp._get_patches_root
+        vp._get_patches_root = lambda: str(tmp_path)
 
         ver_name = "MatchTest"
-        from patcher.version_io import create_version
+        from patcher.patch_io import create_patch
         from models import EngineFile
-        ver = create_version(str(tmp_path), ver_name)
+        ver = create_patch(str(tmp_path), ver_name)
         ver.files.append(EngineFile(
             path_custom="my_file.cpp",
             path_target="Engine/Target/my_file.cpp",
         ))
-        from patcher.version_io import write_info
+        from patcher.patch_io import write_info
         write_info(ver)
 
         # Create files on disk
@@ -103,23 +103,23 @@ class TestVerifyFunction:
             assert ok is True
             assert "match" in msg
         finally:
-            vp._get_versions_root = original_get_root
+            vp._get_patches_root = original_get_root
 
     def test_files_mismatch(self, tmp_path):
         """File content differs — fails."""
         import verify_patch as vp
-        original_get_root = vp._get_versions_root
-        vp._get_versions_root = lambda: str(tmp_path)
+        original_get_root = vp._get_patches_root
+        vp._get_patches_root = lambda: str(tmp_path)
 
         ver_name = "MismatchTest"
-        from patcher.version_io import create_version
+        from patcher.patch_io import create_patch
         from models import EngineFile
-        ver = create_version(str(tmp_path), ver_name)
+        ver = create_patch(str(tmp_path), ver_name)
         ver.files.append(EngineFile(
             path_custom="file.cpp",
             path_target="Engine/Target/file.cpp",
         ))
-        from patcher.version_io import write_info
+        from patcher.patch_io import write_info
         write_info(ver)
 
         ver_dir = tmp_path / ver_name
@@ -134,4 +134,4 @@ class TestVerifyFunction:
             assert ok is False
             assert "MISMATCH" in msg or "FAILED" in msg
         finally:
-            vp._get_versions_root = original_get_root
+            vp._get_patches_root = original_get_root

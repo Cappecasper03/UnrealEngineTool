@@ -8,12 +8,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from patcher.file_patcher import FilePatcher, PatchResult
-from patcher.version_io import discover_versions
+from patcher.patch_io import discover_patches
 
 from .conftest import (
-    PROJECT_ROOT, _PATCHES_ROOT, UE_INSTALL_DIR, VERSION_NAME,
+    PROJECT_ROOT, _PATCHES_ROOT, UE_INSTALL_DIR, PATCH_NAME,
     TARGET_FILE, MARKER_FILE, CUSTOM_SRC, ORIGINAL_SRC,
-    VERSION_NAME, md5, _PATCHES_ROOT,
+    PATCH_NAME, md5, _PATCHES_ROOT,
 )
 
 
@@ -23,16 +23,16 @@ def patcher() -> FilePatcher:
 
 
 @pytest.fixture
-def version():
-    versions = discover_versions(str(_PATCHES_ROOT))
-    v = next((x for x in versions if x.engine_version == VERSION_NAME), None)
-    assert v is not None, f"Version {VERSION_NAME} not found"
-    return v
+def patch():
+    patches = discover_patches(str(_PATCHES_ROOT))
+    p = next((x for x in patches if x.patch_name == PATCH_NAME), None)
+    assert p is not None, f"Patch {PATCH_NAME} not found"
+    return p
 
 
 @pytest.fixture
-def all_versions():
-    return discover_versions(str(_PATCHES_ROOT))
+def all_patches():
+    return discover_patches(str(_PATCHES_ROOT))
 
 
 class TestMarker:
@@ -54,10 +54,10 @@ class TestMarker:
 class TestApplyCustom:
     """Applying a custom engine version."""
 
-    def test_apply_custom_success(self, patcher, version, all_versions):
+    def test_apply_custom_success(self, patcher, patch, all_patches):
         original_hash = md5(TARGET_FILE)
         result = patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
+            patch, all_patches, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success, f"failed: {result.message}"
@@ -66,15 +66,15 @@ class TestApplyCustom:
         # File changed to custom
         assert md5(TARGET_FILE) == md5(CUSTOM_SRC)
         # Marker updated
-        assert MARKER_FILE.read_text().strip() == VERSION_NAME
+        assert MARKER_FILE.read_text().strip() == PATCH_NAME
 
-    def test_apply_custom_creates_backup(self, patcher, version, all_versions):
-        backup_dir = _PATCHES_ROOT / VERSION_NAME / "_originals"
+    def test_apply_custom_creates_backup(self, patcher, patch, all_patches):
+        backup_dir = _PATCHES_ROOT / PATCH_NAME / "_originals"
         target_rel = "Engine/Source/Editor/MainFrame/Private/HomeScreen/SHomeScreen.cpp"
         backup_path = backup_dir / target_rel
 
         result = patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
+            patch, all_patches, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success
@@ -85,17 +85,17 @@ class TestApplyCustom:
 class TestApplyDefault:
     """Reverting to default engine version."""
 
-    def test_revert_success(self, patcher, version, all_versions):
+    def test_revert_success(self, patcher, patch, all_patches):
         # Apply custom first so we have something to revert
         patcher.apply_custom(
-            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
+            patch, all_patches, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert md5(TARGET_FILE) == md5(CUSTOM_SRC)
 
         # Now revert
         result = patcher.apply_default(
-            version, all_versions, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
+            patch, all_patches, str(UE_INSTALL_DIR), str(_PATCHES_ROOT),
             source_mode=False,
         )
         assert result.success, f"failed: {result.message}"
@@ -136,13 +136,13 @@ class TestDetectAppliedVersion:
 
     def test_reads_marker_value(self, target_file, marker_file):
         from patcher.file_patcher import FilePatcher
-        from patcher.version_io import discover_versions
+        from patcher.patch_io import discover_patches
         from .conftest import _PATCHES_ROOT
         # Path: .../UE_5.7/Engine/Source/Editor/... -> UE root is 7 levels up from cpp
         ue_root = target_file.parents[6]
-        versions = discover_versions(str(_PATCHES_ROOT))
+        patches = discover_patches(str(_PATCHES_ROOT))
         # Marker should be "default" from conftest hard_reset
-        result = FilePatcher.detect_applied_version(str(ue_root), versions)
+        result = FilePatcher.detect_applied_version(str(ue_root), patches)
         assert result == "default"
 
     def test_returns_none_when_no_marker(self, tmp_path):
@@ -154,7 +154,7 @@ class TestDetectAppliedVersion:
         from patcher.file_patcher import FilePatcher
         FilePatcher.write_marker(str(tmp_path), "UE_5.7-Test")
         from models import EngineInfo
-        result = FilePatcher.detect_applied_version(str(tmp_path), [EngineInfo(engine_version="ue_5.7-test")])
+        result = FilePatcher.detect_applied_version(str(tmp_path), [EngineInfo(patch_name="ue_5.7-test")])
         assert result == "ue_5.7-test"
 
     def test_accepts_unknown_marker(self, tmp_path):

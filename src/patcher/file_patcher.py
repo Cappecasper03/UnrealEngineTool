@@ -25,7 +25,7 @@ def _is_source_file(path: str) -> bool:
 
 
 class FilePatcher:
-    """Handles copying/removing engine files for custom engine versions."""
+    """Handles copying/removing engine files for custom engine patches."""
 
     # Marker file written to UE installation after a successful apply
     MARKER_RELPATH = "Engine/Binaries/.uepatcher_version"
@@ -35,18 +35,18 @@ class FilePatcher:
         return os.path.join(ue_dir, FilePatcher.MARKER_RELPATH)
 
     @staticmethod
-    def write_marker(ue_dir: str, version_name: str):
-        """Write the applied version marker."""
+    def write_marker(ue_dir: str, patch_name: str):
+        """Write the applied patch marker."""
         path = FilePatcher.marker_path(ue_dir)
         d = os.path.dirname(path)
         if d and not os.path.isdir(d):
             os.makedirs(d, exist_ok=True)
         with open(path, "w") as f:
-            f.write(version_name.strip())
+            f.write(patch_name.strip())
 
     @staticmethod
     def read_marker(ue_dir: str) -> str:
-        """Read the applied version marker, or empty string if none."""
+        """Read the applied patch marker, or empty string if none."""
         path = FilePatcher.marker_path(ue_dir)
         if not os.path.isfile(path):
             return ""
@@ -59,50 +59,50 @@ class FilePatcher:
             return ""
 
     @staticmethod
-    def detect_applied_version(ue_dir: str, all_versions: List[EngineInfo]) -> Optional[str]:
-        """Return the engine_version matching the marker, or None."""
+    def detect_applied_version(ue_dir: str, all_patches: List[EngineInfo]) -> Optional[str]:
+        """Return the patch_name matching the marker, or None."""
         marker = FilePatcher.read_marker(ue_dir)
         if not marker:
             return None
-        # Check against known versions (case-insensitive)
-        for v in all_versions:
-            if v.engine_version.lower() == marker.lower():
-                return v.engine_version
-        # Also accept marker value that isn't a known version (manual edit)
+        # Check against known patches (case-insensitive)
+        for v in all_patches:
+            if v.patch_name.lower() == marker.lower():
+                return v.patch_name
+        # Also accept marker value that isn't a known patch (manual edit)
         return marker
 
     def apply_custom(
         self,
-        engine_version: EngineInfo,
-        all_versions: List[EngineInfo],
+        patch: EngineInfo,
+        all_patches: List[EngineInfo],
         ue_install_dir: str,
-        versions_root: str,
+        patches_root: str,
         source_mode: bool,
     ) -> PatchResult:
         return self._apply_files(
-            engine_version, all_versions, ue_install_dir, versions_root,
+            patch, all_patches, ue_install_dir, patches_root,
             custom_engine=True, source_mode=source_mode,
         )
 
     def apply_default(
         self,
-        engine_version: EngineInfo,
-        all_versions: List[EngineInfo],
+        patch: EngineInfo,
+        all_patches: List[EngineInfo],
         ue_install_dir: str,
-        versions_root: str,
+        patches_root: str,
         source_mode: bool,
     ) -> PatchResult:
         return self._apply_files(
-            engine_version, all_versions, ue_install_dir, versions_root,
+            patch, all_patches, ue_install_dir, patches_root,
             custom_engine=False, source_mode=source_mode,
         )
 
     def _apply_files(
         self,
-        engine_version: EngineInfo,
-        all_versions: List[EngineInfo],
+        patch: EngineInfo,
+        all_patches: List[EngineInfo],
         ue_install_dir: str,
-        versions_root: str,
+        patches_root: str,
         custom_engine: bool,
         source_mode: bool,
     ) -> PatchResult:
@@ -134,16 +134,16 @@ class FilePatcher:
 
         # Collect files with parent inheritance
         self._collect_files(
-            engine_version, all_versions, custom_engine, versions_root,
+            patch, all_patches, custom_engine, patches_root,
             ue_install_dir, source_mode,
             files_to_copy, files_to_remove, ignored_targets,
         )
 
-        ver_dir = os.path.join(versions_root, engine_version.engine_version)
+        patch_dir = os.path.join(patches_root, patch.patch_name)
 
         action_label = "custom" if custom_engine else "default"
-        log.info("%s apply start — version=%s target=%s files_to_copy=%d files_to_remove=%d",
-                 action_label, engine_version.engine_version, ue_install_dir,
+        log.info("%s apply start — patch=%s target=%s files_to_copy=%d files_to_remove=%d",
+                 action_label, patch.patch_name, ue_install_dir,
                  len(files_to_copy), len(files_to_remove))
 
         if custom_engine:
@@ -151,9 +151,9 @@ class FilePatcher:
             for i, (src, dst) in enumerate(files_to_copy):
                 if not os.path.isfile(dst):
                     continue  # No original to back up — file doesn't exist in UE yet
-                # Compute backup path inside version dir
+                # Compute backup path inside patch dir
                 target_rel = os.path.relpath(dst, ue_install_dir)
-                backup_abs = os.path.join(ver_dir, "_originals", target_rel)
+                backup_abs = os.path.join(patch_dir, "_originals", target_rel)
                 backup_dir = os.path.dirname(backup_abs)
                 if backup_dir and not os.path.isdir(backup_dir):
                     os.makedirs(backup_dir, exist_ok=True)
@@ -165,7 +165,7 @@ class FilePatcher:
 
                     # Update the EngineFile entry so path_default points to the backup
                     target = os.path.relpath(dst, ue_install_dir).replace("\\", "/")
-                    for fe in engine_version.files:
+                    for fe in patch.files:
                         if fe.path_target.replace("\\", "/") == target:
                             backup_rel = f"_originals/{target_rel.replace(chr(92), '/')}"
                             fe.path_default = backup_rel
@@ -180,8 +180,8 @@ class FilePatcher:
             # Save updated path_default back to info.dat so revert can find originals
             if result.files_removed > 0:
                 try:
-                    from patcher.version_io import write_info
-                    write_info(engine_version)
+                    from patcher.patch_io import write_info
+                    write_info(patch)
                 except OSError:
                     pass  # Non-fatal — backups exist on disk anyway
 
@@ -232,8 +232,8 @@ class FilePatcher:
             f"{action}: {result.files_copied} files copied, "
             f"{result.files_removed} removed."
         )
-        # Write marker so we can detect applied version on next launch
-        marker_value = "default" if not custom_engine else engine_version.engine_version
+        # Write marker so we can detect applied patch on next launch
+        marker_value = "default" if not custom_engine else patch.patch_name
         try:
             self.write_marker(ue_install_dir, marker_value)
             log.info("Marker written: %s -> %s", marker_value, FilePatcher.marker_path(ue_install_dir))
@@ -247,9 +247,9 @@ class FilePatcher:
     def _collect_files(
         self,
         version: EngineInfo,
-        all_versions: List[EngineInfo],
+        all_patches: List[EngineInfo],
         custom_engine: bool,
-        versions_root: str,
+        patches_root: str,
         ue_install_dir: str,
         source_mode: bool,
         files_to_copy: List[Tuple[str, str]],
@@ -270,7 +270,7 @@ class FilePatcher:
                     source_path = (
                         file_entry.path_custom
                         if os.path.isabs(file_entry.path_custom)
-                        else os.path.join(versions_root, version.engine_version, file_entry.path_custom)
+                        else os.path.join(patches_root, version.patch_name, file_entry.path_custom)
                     )
                     if source_mode and not _is_source_file(file_entry.path_custom):
                         continue
@@ -285,7 +285,7 @@ class FilePatcher:
                     source_path = (
                         file_entry.path_default
                         if os.path.isabs(file_entry.path_default)
-                        else os.path.join(versions_root, version.engine_version, file_entry.path_default)
+                        else os.path.join(patches_root, version.patch_name, file_entry.path_default)
                     )
                     if source_mode and not _is_source_file(file_entry.path_default):
                         continue
@@ -297,11 +297,11 @@ class FilePatcher:
                         files_to_remove.append(target_path)
 
         # Recurse to parent
-        if version.parent_version:
-            for v in all_versions:
-                if v.engine_version.lower() == version.parent_version.lower():
+        if version.parent_patch:
+            for v in all_patches:
+                if v.patch_name.lower() == version.parent_patch.lower():
                     self._collect_files(
-                        v, all_versions, custom_engine, versions_root,
+                        v, all_patches, custom_engine, patches_root,
                         ue_install_dir, source_mode,
                         files_to_copy, files_to_remove, ignored_targets,
                     )

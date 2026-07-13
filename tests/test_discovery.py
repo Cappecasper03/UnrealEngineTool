@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from patcher.version_dialog import (
+from patcher.patch_dialog import (
     _discover_binaries,
     _discover_module_intermediates,
     _relativise,
@@ -35,7 +35,7 @@ class TestRelativise:
     def test_with_version_dir_prefix(self, tmp_path):
         ver_dir = str(tmp_path / "v1.0")
         path = os.path.join(ver_dir, "Engine/Source/Runtime/Core.cpp")
-        rel = _relativise(path, version_dir=ver_dir)
+        rel = _relativise(path, patch_dir=ver_dir)
         assert rel == "Engine/Source/Runtime/Core.cpp"
 
     def test_case_insensitive_engine(self):

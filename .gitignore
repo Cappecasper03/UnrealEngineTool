@@ -19,5 +19,5 @@ Thumbs.db
 *.spec
 
 # Project-specific
-Versions/
 Test-Engines/
+.hermes-tmp.*

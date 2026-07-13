@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Verify the state of a UE installation against a patch version.
+"""Verify the state of a UE installation against a patch.
 
 Usage:
-    python src/verify_patch.py <ue-install-dir> <expected-version-name>
+    python src/verify_patch.py <ue-install-dir> <expected-patch-name>
 
 Prints a human-readable report of what's applied, what files differ, and exits
 with code 0 if everything matches, 1 if there are differences.
@@ -35,7 +35,7 @@ from typing import List, Optional, Tuple
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from logger import get_logger
-from patcher.version_io import discover_versions, read_info
+from patcher.patch_io import discover_patches, read_info
 from patcher.file_patcher import FilePatcher
 from models import EngineInfo
 
@@ -51,24 +51,24 @@ def md5(path: str) -> str:
     return h.hexdigest()
 
 
-def _get_versions_root() -> str:
+def _get_patches_root() -> str:
     """Resolve the patches directory under LOCALAPPDATA."""
     from logger import default_patches_root
     return default_patches_root()
 
 
-def _find_version(
-    version_name: str, versions: List[EngineInfo]
+def _find_patch(
+    patch_name: str, patches: List[EngineInfo]
 ) -> Optional[EngineInfo]:
-    key = version_name.lower()
-    for v in versions:
-        if v.engine_version.lower() == key:
-            return v
+    key = patch_name.lower()
+    for p in patches:
+        if p.patch_name.lower() == key:
+            return p
     return None
 
 
 def verify(
-    ue_dir: str, expected_version: str, verbose: bool = True
+    ue_dir: str, expected_patch: str, verbose: bool = True
 ) -> Tuple[bool, str]:
     """Verify the state of a UE installation.
 
@@ -78,24 +78,24 @@ def verify(
         return False, f"UE directory does not exist: {ue_dir}"
 
     ue_dir = os.path.normpath(ue_dir)
-    root = _get_versions_root()
-    versions = discover_versions(root)
+    root = _get_patches_root()
+    patches = discover_patches(root)
 
     # ── Check the marker ──
     marker = FilePatcher.read_marker(ue_dir)
-    expected_lower = expected_version.lower()
+    expected_lower = expected_patch.lower()
 
     if marker.lower() != expected_lower:
         return (
             False,
-            f"Marker mismatch: expected '{expected_version}', "
+            f"Marker mismatch: expected '{expected_patch}', "
             f"found '{marker}'",
         )
 
     if verbose:
         print(f"[OK] Marker: {marker}")
 
-    log.debug("Marker check: expected=%s actual=%s OK", expected_version, marker)
+    log.debug("Marker check: expected=%s actual=%s OK", expected_patch, marker)
 
     # Special case: "default" means not applied — just check marker
     if expected_lower == "default":
@@ -103,17 +103,17 @@ def verify(
         return True, f"UE installation is in default state (marker: {marker})"
 
     # ── Check file hashes ──
-    version = _find_version(expected_version, versions)
-    if not version:
-        return False, f"Version '{expected_version}' not found in {root}"
+    patch = _find_patch(expected_patch, patches)
+    if not patch:
+        return False, f"Patch '{expected_patch}' not found in {root}"
 
-    if not version.files:
-        return True, f"Version '{expected_version}' has no file entries to verify"
+    if not patch.files:
+        return True, f"Patch '{expected_patch}' has no file entries to verify"
 
     issues = []
     ok_count = 0
 
-    for fe in version.files:
+    for fe in patch.files:
         target_path = os.path.join(ue_dir, fe.path_target.lstrip("\\/"))
         if not os.path.isfile(target_path):
             issues.append(f"  MISSING  {fe.path_target}")
@@ -123,7 +123,7 @@ def verify(
         source_path = fe.path_custom if fe.path_custom else fe.path_default
         if source_path and not os.path.isabs(source_path):
             source_path = os.path.join(
-                root, version.engine_version, source_path
+                root, patch.patch_name, source_path
             )
 
         if source_path and os.path.isfile(source_path):
@@ -149,19 +149,19 @@ def verify(
 
     if issues:
         report = (
-            f"Verification FAILED for '{expected_version}' "
+            f"Verification FAILED for '{expected_patch}' "
             f"at {ue_dir}:\n"
             + "\n".join(issues)
         )
         log.warning("Verification FAILED for %s at %s: %d issue(s)",
-                     expected_version, ue_dir, len(issues))
+                     expected_patch, ue_dir, len(issues))
         return False, report
 
     log.info("Verification PASSED for %s at %s: %d file(s) OK",
-             expected_version, ue_dir, ok_count)
+             expected_patch, ue_dir, ok_count)
     return (
         True,
-        f"All {ok_count} file(s) match '{expected_version}' "
+        f"All {ok_count} file(s) match '{expected_patch}' "
         f"at {ue_dir}",
     )
 
@@ -169,7 +169,7 @@ def verify(
 def main() -> int:
     if len(sys.argv) < 3:
         print(
-            f"Usage: {sys.argv[0]} <ue-install-dir> <expected-version-name>\n"
+            f"Usage: {sys.argv[0]} <ue-install-dir> <expected-patch-name>\n"
             f"       Use 'default' for an unpatched installation.",
             file=sys.stderr,
         )

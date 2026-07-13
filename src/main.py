@@ -6,7 +6,7 @@ Built with PySide6.
 
 Usage:
     python src/main.py                          # GUI mode
-    python src/main.py list                     # Headless: list versions
+    python src/main.py list                     # Headless: list patches
     python src/main.py apply-custom <ver> <dir> # Headless: apply custom
     python src/main.py apply-default <ver> <dir># Headless: revert
 """

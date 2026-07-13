@@ -1,4 +1,4 @@
-"""Dialogs for creating, editing, and deleting engine versions and their file entries."""
+"""Dialogs for creating, editing, and deleting engine patches and their file entries."""
 
 import os
 import shutil
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from models import EngineInfo, EngineFile
-from patcher.version_io import read_info, write_info, create_version, delete_version, discover_versions
+from patcher.patch_io import read_info, write_info, create_patch, delete_patch, discover_patches
 from registry_helper import discover_ue_installations
 from theme import C_TEXT_DIM, C_CARD, C_CARD_BORDER
 
@@ -53,10 +53,10 @@ def _make_section_card(title: str) -> tuple:
 
 # ── File Entry Adder (multi-file selection + auto binary detection) ──
 
-def _relativise(path: str, version_dir: str = "") -> str:
+def _relativise(path: str, patch_dir: str = "") -> str:
     """Convert an absolute file path to an engine-relative path."""
-    if version_dir and path.startswith(version_dir):
-        return os.path.relpath(path, version_dir).replace("\\", "/")
+    if patch_dir and path.startswith(patch_dir):
+        return os.path.relpath(path, patch_dir).replace("\\", "/")
     norm = path.replace("\\", "/")
     idx = norm.lower().find("/engine/")
     if idx >= 0:
@@ -203,13 +203,13 @@ class FileEntryDialog(QDialog):
     Engine/Binaries/Win64 are auto-discovered and included.
     """
 
-    def __init__(self, parent=None, version_dir: str = ""):
+    def __init__(self, parent=None, patch_dir: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Add Files")
         self.setMinimumWidth(520)
         self.setMinimumHeight(350)
         self.resize(560, 420)
-        self._version_dir = version_dir
+        self._patch_dir = patch_dir
         self._entries: List[EngineFile] = []  # Populated after OK
         self._copied_abs: List[str] = []      # Absolute paths of files to copy in
 
@@ -292,7 +292,7 @@ class FileEntryDialog(QDialog):
 
         for path in sorted(paths):
             self._copied_abs.append(path)
-            rel = _relativise(path, self._version_dir)
+            rel = _relativise(path, self._patch_dir)
             entry = EngineFile(
                 path_custom=rel,
                 path_default="",
@@ -363,7 +363,7 @@ class FileEntryDialog(QDialog):
         return self._entries
 
     def get_copied_paths(self) -> List[str]:
-        """Absolute paths of browsed files (for copying into version dir)."""
+        """Absolute paths of browsed files (for copying into patch dir)."""
         return self._copied_abs
 
 
@@ -380,17 +380,17 @@ _COMBO_QSS = (
 )
 
 
-class VersionManagerDialog(QDialog):
-    """Dialog for creating, editing, and deleting patches (engine versions) and their file entries."""
+class PatchManagerDialog(QDialog):
+    """Dialog for creating, editing, and deleting patches (engine patches) and their file entries."""
 
-    def __init__(self, parent=None, versions_root: str = ""):
+    def __init__(self, parent=None, patches_root: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Patch Manager")
         self.setMinimumSize(800, 560)
         self.resize(900, 620)
 
-        self._versions_root = versions_root
-        self._versions: List[EngineInfo] = []
+        self._patches_root = patches_root
+        self._patches: List[EngineInfo] = []
         self._dirty = False  # Track whether any changes were made
 
         self._build_ui()
@@ -410,10 +410,10 @@ class VersionManagerDialog(QDialog):
         # ── Left panel: Patch List ──
         left_card, lc = _make_section_card("Patches")
 
-        self._version_list = QListWidget()
-        self._version_list.setMinimumWidth(160)
-        self._version_list.currentRowChanged.connect(self._on_selection_changed)
-        lc.addWidget(self._version_list, 1)
+        self._patch_list = QListWidget()
+        self._patch_list.setMinimumWidth(160)
+        self._patch_list.currentRowChanged.connect(self._on_selection_changed)
+        lc.addWidget(self._patch_list, 1)
 
         # List action buttons
         list_btn_row = QHBoxLayout()
@@ -453,9 +453,9 @@ class VersionManagerDialog(QDialog):
         name_label.setStyleSheet("background: transparent;")
         det_grid.addWidget(name_label, 0, 0)
 
-        self._ver_name = QLineEdit()
-        self._ver_name.setPlaceholderText("e.g. v1.0")
-        det_grid.addWidget(self._ver_name, 0, 1, 1, 2)
+        self._patch_name = QLineEdit()
+        self._patch_name.setPlaceholderText("e.g. v1.0")
+        det_grid.addWidget(self._patch_name, 0, 1, 1, 2)
 
         # Original Engine
         orig_label = QLabel("Original Engine:")
@@ -583,15 +583,15 @@ class VersionManagerDialog(QDialog):
     # ── List management ──
 
     def _refresh_list(self):
-        self._versions = discover_versions(self._versions_root)
+        self._patches = discover_patches(self._patches_root)
 
         # Update parent combo items
         self._parent_combo.blockSignals(True)
         current_parent = self._parent_combo.currentData()
         self._parent_combo.clear()
         self._parent_combo.addItem("(none)", "")
-        for v in self._versions:
-            self._parent_combo.addItem(v.engine_version, v.engine_version)
+        for p in self._patches:
+            self._parent_combo.addItem(p.patch_name, p.patch_name)
         # Restore selection if possible
         idx = self._parent_combo.findData(current_parent)
         if idx >= 0:
@@ -599,20 +599,20 @@ class VersionManagerDialog(QDialog):
         self._parent_combo.blockSignals(False)
 
         # Rebuild list
-        self._version_list.blockSignals(True)
-        self._version_list.clear()
-        for v in self._versions:
-            self._version_list.addItem(v.engine_version)
-        self._version_list.blockSignals(False)
+        self._patch_list.blockSignals(True)
+        self._patch_list.clear()
+        for p in self._patches:
+            self._patch_list.addItem(p.patch_name)
+        self._patch_list.blockSignals(False)
 
-        if self._versions:
-            self._version_list.setCurrentRow(0)
+        if self._patches:
+            self._patch_list.setCurrentRow(0)
         else:
             self._clear_details()
             self._file_add_btn.setEnabled(False)
 
     def _on_selection_changed(self, row: int):
-        if row < 0 or row >= len(self._versions):
+        if row < 0 or row >= len(self._patches):
             self._clear_details()
             self._clone_btn.setEnabled(False)
             self._delete_btn.setEnabled(False)
@@ -620,43 +620,43 @@ class VersionManagerDialog(QDialog):
             self._file_remove_btn.setEnabled(False)
             return
 
-        version = self._versions[row]
-        self._ver_name.setText(version.engine_version)
+        patch = self._patches[row]
+        self._patch_name.setText(patch.patch_name)
 
         # Populate original engine combo with discovered UE paths + select current
         self._orig_engine_combo.blockSignals(True)
         self._orig_engine_combo.clear()
         self._orig_engine_combo.addItem("(none)", "")
         self._populate_ue_paths(self._orig_engine_combo)
-        if version.unreal_dir:
-            norm = os.path.normpath(version.unreal_dir).lower()
+        if patch.unreal_dir:
+            norm = os.path.normpath(patch.unreal_dir).lower()
             for i in range(self._orig_engine_combo.count()):
                 stored = self._orig_engine_combo.itemData(i, Qt.ItemDataRole.UserRole)
                 if stored and os.path.normpath(stored).lower() == norm:
                     self._orig_engine_combo.setCurrentIndex(i)
                     break
             else:
-                self._orig_engine_combo.addItem(version.unreal_dir)
+                self._orig_engine_combo.addItem(patch.unreal_dir)
                 idx = self._orig_engine_combo.count() - 1
-                self._orig_engine_combo.setItemData(idx, version.unreal_dir, Qt.ItemDataRole.UserRole)
+                self._orig_engine_combo.setItemData(idx, patch.unreal_dir, Qt.ItemDataRole.UserRole)
                 self._orig_engine_combo.setCurrentIndex(idx)
         self._orig_engine_combo.blockSignals(False)
 
-        # Rebuild parent combo excluding this version (no self-reference)
+        # Rebuild parent combo excluding this patch (no self-reference)
         self._parent_combo.blockSignals(True)
         current_parent = self._parent_combo.currentData()
         self._parent_combo.clear()
         self._parent_combo.addItem("(none)", "")
-        for v in self._versions:
-            if v.engine_version != version.engine_version:
-                self._parent_combo.addItem(v.engine_version, v.engine_version)
-        idx = self._parent_combo.findData(version.parent_version)
+        for p in self._patches:
+            if p.patch_name != patch.patch_name:
+                self._parent_combo.addItem(p.patch_name, p.patch_name)
+        idx = self._parent_combo.findData(patch.parent_patch)
         self._parent_combo.setCurrentIndex(max(idx, 0))
         self._parent_combo.blockSignals(False)
 
-        self._changelog.setPlainText(version.changelog)
+        self._changelog.setPlainText(patch.changelog)
 
-        self._populate_file_table(version.files)
+        self._populate_file_table(patch.files)
 
         self._clone_btn.setEnabled(True)
         self._delete_btn.setEnabled(True)
@@ -666,12 +666,12 @@ class VersionManagerDialog(QDialog):
     def _on_file_table_selection_changed(self, row: int, column: int, prev_row: int, prev_column: int):
         """Enable the Remove button when a file row is selected."""
         has_selection = row >= 0
-        version_row = self._version_list.currentRow()
-        has_version = 0 <= version_row < len(self._versions)
-        self._file_remove_btn.setEnabled(has_version and has_selection)
+        patch_row = self._patch_list.currentRow()
+        has_patch = 0 <= patch_row < len(self._patches)
+        self._file_remove_btn.setEnabled(has_patch and has_selection)
 
     def _clear_details(self):
-        self._ver_name.clear()
+        self._patch_name.clear()
         self._orig_engine_combo.blockSignals(True)
         self._orig_engine_combo.clear()
         self._orig_engine_combo.addItem("(none)", "")
@@ -690,7 +690,7 @@ class VersionManagerDialog(QDialog):
             if item:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-    # ── Version CRUD ──
+    # ── Patch CRUD ──
 
     def _on_new(self):
         name, ok = self._ask_name("New Patch", "Patch name:")
@@ -698,61 +698,61 @@ class VersionManagerDialog(QDialog):
             return
 
         try:
-            new_ver = create_version(self._versions_root, name.strip())
-            self._versions.append(new_ver)
+            new_patch = create_patch(self._patches_root, name.strip())
+            self._patches.append(new_patch)
             self._dirty = True
             self._refresh_list()
-            # Select the new version
-            for i, v in enumerate(self._versions):
-                if v.engine_version == name.strip():
-                    self._version_list.setCurrentRow(i)
+            # Select the new patch
+            for i, p in enumerate(self._patches):
+                if p.patch_name == name.strip():
+                    self._patch_list.setCurrentRow(i)
                     break
         except FileExistsError as e:
             QMessageBox.warning(self, "Error", str(e))
 
     def _on_clone(self):
-        row = self._version_list.currentRow()
-        if row < 0 or row >= len(self._versions):
+        row = self._patch_list.currentRow()
+        if row < 0 or row >= len(self._patches):
             return
-        source = self._versions[row]
+        source = self._patches[row]
 
-        name, ok = self._ask_name("Clone Patch", f"New name (cloned from {source.engine_version}):")
+        name, ok = self._ask_name("Clone Patch", f"New name (cloned from {source.patch_name}):")
         if not ok or not name.strip():
             return
 
         try:
-            new_ver = create_version(
-                self._versions_root, name.strip(),
+            new_patch = create_patch(
+                self._patches_root, name.strip(),
                 unreal_version=source.unreal_version,
-                parent_version=source.parent_version,
+                parent_patch=source.parent_patch,
                 clone_from=source,
             )
-            # Also copy the actual files from the source version directory
+            # Also copy the actual files from the source patch directory
             src_dir = os.path.dirname(source.info_dir)
-            dst_dir = os.path.dirname(new_ver.info_dir)
+            dst_dir = os.path.dirname(new_patch.info_dir)
             if os.path.isdir(src_dir):
                 shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
 
-            self._versions.append(new_ver)
+            self._patches.append(new_patch)
             self._dirty = True
             self._refresh_list()
-            for i, v in enumerate(self._versions):
-                if v.engine_version == name.strip():
-                    self._version_list.setCurrentRow(i)
+            for i, p in enumerate(self._patches):
+                if p.patch_name == name.strip():
+                    self._patch_list.setCurrentRow(i)
                     break
         except FileExistsError as e:
             QMessageBox.warning(self, "Error", str(e))
 
     def _on_delete(self):
-        row = self._version_list.currentRow()
-        if row < 0 or row >= len(self._versions):
+        row = self._patch_list.currentRow()
+        if row < 0 or row >= len(self._patches):
             return
-        version = self._versions[row]
+        patch = self._patches[row]
 
         reply = QMessageBox.question(
             self, "Delete Patch",
-            f"Delete patch '{version.engine_version}' and ALL its files?\n"
-            f"Location: {os.path.dirname(version.info_dir)}\n\n"
+            f"Delete patch '{patch.patch_name}' and ALL its files?\n"
+            f"Location: {os.path.dirname(patch.info_dir)}\n\n"
             "This cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
@@ -760,12 +760,12 @@ class VersionManagerDialog(QDialog):
             return
 
         try:
-            delete_version(version)
-            self._versions.pop(row)
+            delete_patch(patch)
+            self._patches.pop(row)
             self._dirty = True
             self._refresh_list()
         except (FileNotFoundError, OSError) as e:
-            QMessageBox.warning(self, "Error", f"Failed to delete version: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to delete patch: {e}")
 
     def _on_browse_orig_engine(self):
         """Browse for the original UE installation directory (combo-style like main window)."""
@@ -815,22 +815,22 @@ class VersionManagerDialog(QDialog):
     # ── File entry management ──
 
     def _on_add_file(self):
-        row = self._version_list.currentRow()
-        if row < 0 or row >= len(self._versions):
+        row = self._patch_list.currentRow()
+        if row < 0 or row >= len(self._patches):
             return
-        version = self._versions[row]
-        ver_dir = os.path.normpath(os.path.dirname(version.info_dir))
+        patch = self._patches[row]
+        patch_dir = os.path.normpath(os.path.dirname(patch.info_dir))
 
-        dlg = FileEntryDialog(self, version_dir=ver_dir)
+        dlg = FileEntryDialog(self, patch_dir=patch_dir)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
         entries = dlg.get_entries()
         copied_paths = dlg.get_copied_paths()
 
-        # Determine the original engine directory: use version's stored path,
+        # Determine the original engine directory: use patch's stored path,
         # or try to detect it from the picked files' UE roots
-        original_engine_dir = version.unreal_dir
+        original_engine_dir = patch.unreal_dir
         if not original_engine_dir or not os.path.isdir(original_engine_dir):
             # Fall back: scan picked files for UE installation roots
             for abs_path in copied_paths:
@@ -843,20 +843,20 @@ class VersionManagerDialog(QDialog):
             original_engine_dir = None
 
         for i, entry in enumerate(entries):
-            version.files.append(entry)
+            patch.files.append(entry)
 
-            # Copy browsed custom files into the version directory
+            # Copy browsed custom files into the patch directory
             abs_path = copied_paths[i] if i < len(copied_paths) else ""
             # Only copy files picked by user (not auto-discovered [bin]/[int] tags)
             is_user_picked = bool(abs_path) and os.path.isfile(abs_path)
 
-            if is_user_picked and not abs_path.startswith(ver_dir):
+            if is_user_picked and not abs_path.startswith(patch_dir):
                 rel = entry.path_custom
                 if os.path.isabs(rel):
                     rel = os.path.basename(rel)
                     entry.path_custom = rel
                     entry.path_target = rel
-                dest = os.path.normpath(os.path.join(ver_dir, rel))
+                dest = os.path.normpath(os.path.join(patch_dir, rel))
                 dest_dir = os.path.dirname(dest)
                 if dest_dir and not os.path.isdir(dest_dir):
                     os.makedirs(dest_dir, exist_ok=True)
@@ -864,7 +864,7 @@ class VersionManagerDialog(QDialog):
                     shutil.copy2(abs_path, dest)
                 except OSError as e:
                     QMessageBox.warning(self, "Warning",
-                                        f"Could not copy custom file to version directory:\n{e}")
+                                        f"Could not copy custom file to patch directory:\n{e}")
 
             # Also copy the ORIGINAL file from the original engine directory
             if original_engine_dir and is_user_picked:
@@ -872,7 +872,7 @@ class VersionManagerDialog(QDialog):
                 original_source = os.path.join(original_engine_dir, target_rel)
                 if os.path.isfile(original_source):
                     backup_rel = os.path.join("_originals", target_rel).replace("\\", "/")
-                    backup_dest = os.path.normpath(os.path.join(ver_dir, backup_rel))
+                    backup_dest = os.path.normpath(os.path.join(patch_dir, backup_rel))
                     backup_dir = os.path.dirname(backup_dest)
                     if backup_dir and not os.path.isdir(backup_dir):
                         os.makedirs(backup_dir, exist_ok=True)
@@ -887,47 +887,47 @@ class VersionManagerDialog(QDialog):
                                             f"Could not copy original file from engine:\n{e}")
 
         self._dirty = True
-        self._populate_file_table(version.files)
+        self._populate_file_table(patch.files)
 
     def _on_remove_file(self):
-        row = self._version_list.currentRow()
-        if row < 0 or row >= len(self._versions):
+        row = self._patch_list.currentRow()
+        if row < 0 or row >= len(self._patches):
             return
-        version = self._versions[row]
+        patch = self._patches[row]
         sel = self._file_table.currentRow()
-        if sel < 0 or sel >= len(version.files):
+        if sel < 0 or sel >= len(patch.files):
             return
 
-        version.files.pop(sel)
+        patch.files.pop(sel)
         self._dirty = True
-        self._populate_file_table(version.files)
+        self._populate_file_table(patch.files)
 
     # ── Save / Close ──
 
     def _on_save_all(self):
-        """Write all version metadata back to disk."""
-        for version in self._versions:
-            # Update from UI fields if this version is currently selected
-            row = self._version_list.currentRow()
-            if row >= 0 and row < len(self._versions) and self._versions[row] is version:
-                version.engine_version = self._ver_name.text().strip()
+        """Write all patch metadata back to disk."""
+        for patch in self._patches:
+            # Update from UI fields if this patch is currently selected
+            row = self._patch_list.currentRow()
+            if row >= 0 and row < len(self._patches) and self._patches[row] is patch:
+                patch.patch_name = self._patch_name.text().strip()
                 # Read original engine path from combo user data
                 idx = self._orig_engine_combo.currentIndex()
                 combo_path = self._orig_engine_combo.itemData(idx, Qt.ItemDataRole.UserRole) or ""
-                version.unreal_dir = os.path.normpath(combo_path) if combo_path else ""
-                version.parent_version = self._parent_combo.currentData() or ""
-                version.changelog = self._changelog.toPlainText().strip()
+                patch.unreal_dir = os.path.normpath(combo_path) if combo_path else ""
+                patch.parent_patch = self._parent_combo.currentData() or ""
+                patch.changelog = self._changelog.toPlainText().strip()
 
             try:
-                write_info(version)
+                write_info(patch)
             except OSError as e:
                 QMessageBox.warning(self, "Save Error",
-                                    f"Failed to save '{version.engine_version}': {e}")
+                                    f"Failed to save '{patch.patch_name}': {e}")
 
         self._dirty = False
         self._refresh_list()
         QMessageBox.information(self, "Saved",
-                                f"{len(self._versions)} patch(es) saved.")
+                                f"{len(self._patches)} patch(es) saved.")
 
     def _on_close(self):
         if self._dirty:
@@ -954,6 +954,6 @@ class VersionManagerDialog(QDialog):
         ok = dlg.exec() == QDialog.DialogCode.Accepted
         return dlg.textValue(), ok
 
-    def versions_changed(self) -> bool:
-        """Return True if the version list was modified in any way."""
+    def patches_changed(self) -> bool:
+        """Return True if the patch list was modified in any way."""
         return self._dirty

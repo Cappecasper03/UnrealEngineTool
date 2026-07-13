@@ -12,7 +12,7 @@ from typing import List, Optional
 from models import EngineFile, EngineInfo
 from logger import get_logger
 
-log = get_logger("version_io")
+log = get_logger("patch_io")
 HEADER = b"RPEngineHeader"
 
 
@@ -36,9 +36,9 @@ def _write_string(value: str) -> bytes:
 
 
 def read_info(file_path: str) -> EngineInfo:
-    """Read a version's info.dat file."""
+    """Read a patch's info.dat file."""
     if not os.path.isfile(file_path):
-        raise FileNotFoundError(f"Version info file not found: {file_path}")
+        raise FileNotFoundError(f"Patch info file not found: {file_path}")
 
     with open(file_path, "rb") as f:
         data = f.read()
@@ -52,8 +52,8 @@ def read_info(file_path: str) -> EngineInfo:
         raise ValueError(f"Invalid header: expected {HEADER!r}, got {header!r}")
     offset += 14
 
-    info.engine_version, offset = _read_string(data, offset)
-    info.parent_version, offset = _read_string(data, offset)
+    info.patch_name, offset = _read_string(data, offset)
+    info.parent_patch, offset = _read_string(data, offset)
     info.unreal_version, offset = _read_string(data, offset)
     info.unreal_dir, offset = _read_string(data, offset)
     info.changelog, offset = _read_string(data, offset)
@@ -80,14 +80,14 @@ def read_info(file_path: str) -> EngineInfo:
 
 
 def write_info(info: EngineInfo):
-    """Write a version's info.dat file (binary format)."""
+    """Write a patch's info.dat file (binary format)."""
     dir_path = os.path.dirname(info.info_dir)
     if dir_path and not os.path.isdir(dir_path):
         os.makedirs(dir_path, exist_ok=True)
 
     parts = [HEADER]
-    parts.append(_write_string(info.engine_version))
-    parts.append(_write_string(info.parent_version))
+    parts.append(_write_string(info.patch_name))
+    parts.append(_write_string(info.parent_patch))
     parts.append(_write_string(info.unreal_version))
     parts.append(_write_string(info.unreal_dir))
     parts.append(_write_string(info.changelog))
@@ -103,42 +103,42 @@ def write_info(info: EngineInfo):
             f.write(part)
 
 
-def discover_versions(versions_root: str) -> List[EngineInfo]:
-    """Find all version info files under a root directory."""
-    versions: List[EngineInfo] = []
+def discover_patches(patches_root: str) -> List[EngineInfo]:
+    """Find all patch info files under a root directory."""
+    patches: List[EngineInfo] = []
 
-    if not os.path.isdir(versions_root):
-        return versions
+    if not os.path.isdir(patches_root):
+        return patches
 
-    for dirpath, _, filenames in os.walk(versions_root):
+    for dirpath, _, filenames in os.walk(patches_root):
         for fn in filenames:
             if fn == "info.dat":
                 file_path = os.path.join(dirpath, fn)
                 try:
-                    versions.append(read_info(file_path))
+                    patches.append(read_info(file_path))
                 except (ValueError, OSError):
                     pass  # Skip malformed files
 
-    return versions
+    return patches
 
 
-def create_version(
-    versions_root: str,
-    engine_version: str,
+def create_patch(
+    patches_root: str,
+    patch_name: str,
     unreal_version: str = "",
-    parent_version: str = "",
+    parent_patch: str = "",
     clone_from: Optional[EngineInfo] = None,
 ) -> EngineInfo:
-    """Create a new engine version with an empty info.dat.
+    """Create a new engine patch with an empty info.dat.
 
     If clone_from is provided, copies its file entries (paths remain
-    relative to the cloned version's directory and will need updating).
+    relative to the cloned patch's directory and will need updating).
     """
-    ver_dir = os.path.join(versions_root, engine_version)
-    if os.path.isdir(ver_dir):
-        raise FileExistsError(f"Version '{engine_version}' already exists at {ver_dir}")
+    patch_dir = os.path.join(patches_root, patch_name)
+    if os.path.isdir(patch_dir):
+        raise FileExistsError(f"Patch '{patch_name}' already exists at {patch_dir}")
 
-    os.makedirs(ver_dir, exist_ok=True)
+    os.makedirs(patch_dir, exist_ok=True)
 
     files: List[EngineFile] = []
     if clone_from:
@@ -147,28 +147,27 @@ def create_version(
                        path_target=f.path_target, local_name=f.local_name)
             for f in clone_from.files
         ]
-        log.info("create_version: cloned from %s (%d files)", clone_from.engine_version, len(files))
+        log.info("create_patch: cloned from %s (%d files)", clone_from.patch_name, len(files))
 
     info = EngineInfo(
-        info_dir=os.path.join(ver_dir, "info.dat"),
-        engine_version=engine_version,
-        parent_version=parent_version,
+        info_dir=os.path.join(patch_dir, "info.dat"),
+        patch_name=patch_name,
+        parent_patch=parent_patch,
         unreal_version=unreal_version,
         unreal_dir="",
         changelog="",
         files=files,
     )
     write_info(info)
-    log.info("create_version: created '%s' at %s", engine_version, info.info_dir)
+    log.info("create_patch: created '%s' at %s", patch_name, info.info_dir)
     return info
 
 
-def delete_version(version: EngineInfo) -> None:
-    """Delete a version's directory and all its contents."""
-    ver_dir = os.path.dirname(version.info_dir)
-    if not os.path.isdir(ver_dir):
-        raise FileNotFoundError(f"Version directory not found: {ver_dir}")
+def delete_patch(patch: EngineInfo) -> None:
+    """Delete a patch's directory and all its contents."""
+    patch_dir = os.path.dirname(patch.info_dir)
+    if not os.path.isdir(patch_dir):
+        raise FileNotFoundError(f"Patch directory not found: {patch_dir}")
     import shutil
-    shutil.rmtree(ver_dir)
-    log.info("delete_version: removed '%s' at %s", version.engine_version, ver_dir)
-
+    shutil.rmtree(patch_dir)
+    log.info("delete_patch: removed '%s' at %s", patch.patch_name, patch_dir)

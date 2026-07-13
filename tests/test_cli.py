@@ -7,7 +7,7 @@ import sys
 import pytest
 
 from .conftest import (
-    PROJECT_ROOT, UE_INSTALL_DIR, VERSION_NAME,
+    PROJECT_ROOT, UE_INSTALL_DIR, PATCH_NAME,
 )
 
 
@@ -28,7 +28,7 @@ class TestDispatch:
     def test_list(self):
         rc, out, _ = run("list")
         assert rc == 0
-        assert VERSION_NAME in out
+        assert PATCH_NAME in out
 
     def test_help_short(self):
         rc, out, _ = run("-h")
@@ -42,12 +42,12 @@ class TestDispatch:
         assert "Headless CLI" in out
 
     def test_apply_custom(self):
-        rc, out, _ = run("apply-custom", VERSION_NAME, str(UE_INSTALL_DIR))
+        rc, out, _ = run("apply-custom", PATCH_NAME, str(UE_INSTALL_DIR))
         assert rc == 0
         assert "Success:" in out
 
     def test_apply_default(self):
-        rc, out, _ = run("apply-default", VERSION_NAME, str(UE_INSTALL_DIR))
+        rc, out, _ = run("apply-default", PATCH_NAME, str(UE_INSTALL_DIR))
         assert rc == 0
         assert "Success:" in out
 
@@ -57,10 +57,10 @@ class TestDispatch:
         assert "UnrealEngineTool.log" in out
 
     def test_aliases(self):
-        rc, out, _ = run("apply", VERSION_NAME, str(UE_INSTALL_DIR))
+        rc, out, _ = run("apply", PATCH_NAME, str(UE_INSTALL_DIR))
         assert rc == 0
         assert "Success:" in out
-        rc, out, _ = run("revert", VERSION_NAME, str(UE_INSTALL_DIR))
+        rc, out, _ = run("revert", PATCH_NAME, str(UE_INSTALL_DIR))
         assert rc == 0
         assert "Success:" in out
 
@@ -74,7 +74,7 @@ class TestErrors:
         assert "not found" in out
 
     def test_invalid_ue_dir(self):
-        rc, out, _ = run("apply-custom", VERSION_NAME, "D:/nonexistent")
+        rc, out, _ = run("apply-custom", PATCH_NAME, "D:/nonexistent")
         assert rc == 1
         assert "does not exist" in out
 

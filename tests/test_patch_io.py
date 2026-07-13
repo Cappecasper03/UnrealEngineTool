@@ -1,4 +1,4 @@
-"""Tests for version_io — binary info.dat read/write, create, delete, discover."""
+"""Tests for patch_io — binary info.dat read/write, create, delete, discover."""
 
 import os
 import struct
@@ -9,26 +9,26 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from patcher.version_io import (
-    read_info, write_info, discover_versions,
-    create_version, delete_version,
+from patcher.patch_io import (
+    read_info, write_info, discover_patches,
+    create_patch, delete_patch,
 )
 from models import EngineFile, EngineInfo
 
-from .conftest import _PATCHES_ROOT, VERSION_NAME
+from .conftest import _PATCHES_ROOT, PATCH_NAME
 
 
 @pytest.fixture
 def test_info_path() -> Path:
-    return _PATCHES_ROOT / VERSION_NAME / "info.dat"
+    return _PATCHES_ROOT / PATCH_NAME / "info.dat"
 
 
 class TestReadInfo:
     """Reading the binary info.dat format."""
 
-    def test_read_test_version(self, test_info_path):
+    def test_read_test_patch(self, test_info_path):
         info = read_info(str(test_info_path))
-        assert info.engine_version == VERSION_NAME
+        assert info.patch_name == PATCH_NAME
         assert info.unreal_version == "5.7"
         assert len(info.files) == 1
 
@@ -40,53 +40,53 @@ class TestReadInfo:
         assert fe.path_default != ""
 
 
-class TestDiscoverVersions:
-    """Version discovery from directory."""
+class TestDiscoverPatches:
+    """Patch discovery from directory."""
 
-    def test_discover_finds_test_version(self):
-        versions = discover_versions(str(_PATCHES_ROOT))
-        names = [v.engine_version for v in versions]
-        assert VERSION_NAME in names
+    def test_discover_finds_test_patch(self):
+        patches = discover_patches(str(_PATCHES_ROOT))
+        names = [p.patch_name for p in patches]
+        assert PATCH_NAME in names
 
     def test_discover_empty_directory(self, tmp_path):
         empty = tmp_path / "empty"
         empty.mkdir()
-        versions = discover_versions(str(empty))
-        assert versions == []
+        patches = discover_patches(str(empty))
+        assert patches == []
 
     def test_discover_nonexistent_directory(self):
-        versions = discover_versions("D:/nonexistent_versions")
-        assert versions == []
+        patches = discover_patches("D:/nonexistent_patches")
+        assert patches == []
 
 
-class TestCreateDeleteVersion:
-    """Creating and deleting engine versions."""
+class TestCreateDeletePatch:
+    """Creating and deleting patches."""
 
     def test_create_and_delete(self, tmp_path):
         ver_dir = tmp_path / "TestCreate"
         # Create
-        info = create_version(str(tmp_path), "TestCreate", unreal_version="5.7")
-        assert info.engine_version == "TestCreate"
+        info = create_patch(str(tmp_path), "TestCreate", unreal_version="5.7")
+        assert info.patch_name == "TestCreate"
         assert (tmp_path / "TestCreate" / "info.dat").exists()
 
         # Read back
         info2 = read_info(str(tmp_path / "TestCreate" / "info.dat"))
-        assert info2.engine_version == "TestCreate"
+        assert info2.patch_name == "TestCreate"
 
         # Delete
-        delete_version(info)
+        delete_patch(info)
         assert not (tmp_path / "TestCreate").exists()
 
     def test_create_with_clone(self, tmp_path):
         # Create original
-        orig = create_version(str(tmp_path), "Orig", unreal_version="5.7")
+        orig = create_patch(str(tmp_path), "Orig", unreal_version="5.7")
         orig.files.append(EngineFile(
             path_custom="a.cpp", path_default="a.cpp", path_target="Engine/a.cpp",
         ))
         write_info(orig)
 
         # Clone
-        cloned = create_version(
+        cloned = create_patch(
             str(tmp_path), "Clone", unreal_version="5.7",
             clone_from=orig,
         )
@@ -94,35 +94,35 @@ class TestCreateDeleteVersion:
         assert cloned.files[0].path_custom == "a.cpp"
 
     def test_create_duplicate_raises(self, tmp_path):
-        create_version(str(tmp_path), "Dup")
+        create_patch(str(tmp_path), "Dup")
         with pytest.raises(FileExistsError):
-            create_version(str(tmp_path), "Dup")
+            create_patch(str(tmp_path), "Dup")
 
 
-class TestEditVersion:
-    """Editing existing version metadata and file entries."""
+class TestEditPatch:
+    """Editing existing patch metadata and file entries."""
 
     def test_edit_metadata_round_trip(self, tmp_path):
         """Modify name, changelog, parent, unreal_dir → write → read back."""
-        ver = create_version(str(tmp_path), "EditMe", unreal_version="5.7")
-        # Changing the engine_version means the info_dir must also change
+        ver = create_patch(str(tmp_path), "EditMe", unreal_version="5.7")
+        # Changing the patch_name means the info_dir must also change
         new_dir = os.path.join(str(tmp_path), "EditMe-V2", "info.dat")
         ver.info_dir = new_dir
-        ver.engine_version = "EditMe-V2"
+        ver.patch_name = "EditMe-V2"
         ver.changelog = "Fixed the thing"
-        ver.parent_version = "Base"
+        ver.parent_patch = "Base"
         ver.unreal_dir = "C:/UE_5.7"
         write_info(ver)
 
         info = read_info(str(tmp_path / "EditMe-V2" / "info.dat"))
-        assert info.engine_version == "EditMe-V2"
+        assert info.patch_name == "EditMe-V2"
         assert info.changelog == "Fixed the thing"
-        assert info.parent_version == "Base"
+        assert info.parent_patch == "Base"
         assert info.unreal_dir == "C:/UE_5.7"
 
     def test_add_file_entry_then_write(self, tmp_path):
-        """Add a file entry to a version, write, then read it back."""
-        ver = create_version(str(tmp_path), "AddFiles")
+        """Add a file entry to a patch, write, then read it back."""
+        ver = create_patch(str(tmp_path), "AddFiles")
         ver.files.append(EngineFile(
             path_custom="Custom/a.cpp",
             path_default="Originals/a.cpp",
@@ -140,7 +140,7 @@ class TestEditVersion:
 
     def test_remove_file_entry_then_write(self, tmp_path):
         """Add two files, remove one, write, read back — should have one."""
-        ver = create_version(str(tmp_path), "RmFiles")
+        ver = create_patch(str(tmp_path), "RmFiles")
         ver.files.append(EngineFile(
             path_custom="a.cpp", path_default="", path_target="Engine/a.cpp",
         ))
@@ -158,8 +158,8 @@ class TestEditVersion:
         assert info.files[0].path_custom == "b.cpp"
 
     def test_multiple_file_entries(self, tmp_path):
-        """Write and read back a version with several file entries."""
-        ver = create_version(str(tmp_path), "MultiFiles")
+        """Write and read back a patch with several file entries."""
+        ver = create_patch(str(tmp_path), "MultiFiles")
         for i in range(5):
             ver.files.append(EngineFile(
                 path_custom=f"{i}.cpp",
@@ -176,21 +176,21 @@ class TestEditVersion:
 
     def test_empty_changelog_and_parent(self, tmp_path):
         """Verify that empty strings are preserved correctly."""
-        ver = create_version(str(tmp_path), "EmptyFields")
+        ver = create_patch(str(tmp_path), "EmptyFields")
         # Defaults are already empty
         write_info(ver)
 
         info = read_info(str(tmp_path / "EmptyFields" / "info.dat"))
         assert info.changelog == ""
-        assert info.parent_version == ""
+        assert info.parent_patch == ""
         assert info.unreal_dir == ""
 
     def test_clone_copies_file_directory(self, tmp_path):
         """Clone with actual directory copy (shutil.copytree)."""
         import shutil
 
-        # Create original version with a real file on disk
-        orig_ver = create_version(str(tmp_path), "CloneSrc", unreal_version="5.7")
+        # Create original patch with a real file on disk
+        orig_ver = create_patch(str(tmp_path), "CloneSrc", unreal_version="5.7")
         orig_ver.files.append(EngineFile(
             path_custom="my_file.cpp",
             path_default="",
@@ -198,13 +198,13 @@ class TestEditVersion:
         ))
         write_info(orig_ver)
 
-        # Put a real file in the version directory
+        # Put a real file in the patch directory
         src_dir = os.path.dirname(orig_ver.info_dir)
         with open(os.path.join(src_dir, "my_file.cpp"), "w") as f:
             f.write("// test content")
 
         # Clone
-        cloned = create_version(
+        cloned = create_patch(
             str(tmp_path), "CloneDst", unreal_version="5.7",
             clone_from=orig_ver,
         )
@@ -213,7 +213,7 @@ class TestEditVersion:
             shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
 
         # Verify cloned info
-        assert cloned.engine_version == "CloneDst"
+        assert cloned.patch_name == "CloneDst"
         assert len(cloned.files) == 1
         assert cloned.files[0].path_custom == "my_file.cpp"
 
@@ -227,7 +227,7 @@ class TestEditVersion:
         assert os.path.isfile(os.path.join(src_dir, "my_file.cpp"))
 
 
-class TestVersionIOErrors:
+class TestPatchIOErrors:
     """Error handling for binary info.dat I/O."""
 
     def test_read_missing_file_raises(self):
@@ -259,17 +259,17 @@ class TestVersionIOErrors:
     def test_delete_nonexistent_raises(self, tmp_path):
         fake = EngineInfo(
             info_dir=str(tmp_path / "Nope" / "info.dat"),
-            engine_version="Nope",
+            patch_name="Nope",
         )
         with pytest.raises(FileNotFoundError):
-            delete_version(fake)
+            delete_patch(fake)
 
     def test_write_creates_directory(self, tmp_path):
         """write_info should create parent directories."""
         deep_dir = str(tmp_path / "a" / "b" / "c")
         info = EngineInfo(
             info_dir=os.path.join(deep_dir, "info.dat"),
-            engine_version="Deep",
+            patch_name="Deep",
         )
         info.files.append(EngineFile(
             path_custom="x.cpp", path_default="", path_target="Engine/x.cpp",

@@ -46,7 +46,7 @@ class EngineStatus(IntEnum):
 
 @dataclass
 class EngineFile:
-    """A single file entry in an engine version manifest."""
+    """A single file entry in an engine patch manifest."""
     path_custom: str = ""
     path_default: str = ""
     path_target: str = ""
@@ -55,10 +55,10 @@ class EngineFile:
 
 @dataclass
 class EngineInfo:
-    """Represents a custom engine version with its file manifests and metadata."""
+    """Represents a custom engine patch with its file manifests and metadata."""
     info_dir: str = ""
-    engine_version: str = ""
-    parent_version: str = ""
+    patch_name: str = ""
+    parent_patch: str = ""
     unreal_version: str = ""
     unreal_dir: str = ""
     changelog: str = ""
