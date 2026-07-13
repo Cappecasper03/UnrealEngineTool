@@ -80,3 +80,43 @@ class TestFromCommonFilesystem:
             assert len(result) >= 1  # Should still find UE_5.7
         finally:
             os.chmod(str(restricted), stat.S_IRWXU)  # Restore for cleanup
+
+
+class TestDiscoverUEInstallations:
+    """Top-level discover_ue_installations — integrates sub-functions."""
+
+    def test_dedup_aggregation(self, tmp_path, monkeypatch):
+        """Same path from two sub-sources should appear once."""
+        test_root = tmp_path / "Epic Games"
+        test_root.mkdir(parents=True)
+        ue_dir = test_root / "UE_5.7"
+        ue_dir.mkdir()
+
+        monkeypatch.setattr(
+            "registry_helper._COMMON_UE_ROOTS",
+            [str(test_root)],
+        )
+        from registry_helper import discover_ue_installations
+        result = discover_ue_installations()
+        assert str(ue_dir) in result
+
+    def test_sorted_case_insensitive(self, tmp_path, monkeypatch):
+        """Results should be sorted case-insensitively.
+
+        Must also suppress registry sub-functions so real UE installs
+        don't leak into the result.
+        """
+        epics = tmp_path / "Epic"
+        epics.mkdir()
+        (epics / "ue_a").mkdir()
+        (epics / "UE_B").mkdir()
+        (epics / "ue_c").mkdir()
+
+        monkeypatch.setattr("registry_helper._COMMON_UE_ROOTS", [str(epics)])
+        monkeypatch.setattr("registry_helper._from_registry_builds", lambda: [])
+        monkeypatch.setattr("registry_helper._from_registry_installed_dirs", lambda: [])
+        from registry_helper import discover_ue_installations
+        result = discover_ue_installations()
+        names = [os.path.basename(p).lower() for p in result]
+        assert names == sorted(names)
+        assert len(names) == 3

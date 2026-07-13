@@ -105,3 +105,61 @@ class TestApplyDefault:
         assert md5(TARGET_FILE) == md5(ORIGINAL_SRC)
         # Marker says default
         assert MARKER_FILE.read_text().strip() == "default"
+
+
+class TestIsSourceFile:
+    """_is_source_file helper — used during source-mode apply to filter binaries."""
+
+    def test_cpp_is_source(self):
+        from patcher.file_patcher import _is_source_file
+        assert _is_source_file("Engine/Source/Mod/file.cpp") is True
+
+    def test_h_is_source(self):
+        from patcher.file_patcher import _is_source_file
+        assert _is_source_file("Engine/Source/Mod/file.h") is True
+
+    def test_dll_is_not_source(self):
+        from patcher.file_patcher import _is_source_file
+        assert _is_source_file("Engine/Binaries/Win64/Mod.dll") is False
+
+    def test_pdb_is_not_source(self):
+        from patcher.file_patcher import _is_source_file
+        assert _is_source_file("Engine/Binaries/Win64/Mod.pdb") is False
+
+    def test_empty_ext_is_not_source(self):
+        from patcher.file_patcher import _is_source_file
+        assert _is_source_file("Engine/Source/Mod/README") is False
+
+
+class TestDetectAppliedVersion:
+    """FilePatcher.detect_applied_version — marker-based version detection."""
+
+    def test_reads_marker_value(self, target_file, marker_file):
+        from patcher.file_patcher import FilePatcher
+        from patcher.version_io import discover_versions
+        from .conftest import _PATCHES_ROOT
+        # Path: .../UE_5.7/Engine/Source/Editor/... -> UE root is 7 levels up from cpp
+        ue_root = target_file.parents[6]
+        versions = discover_versions(str(_PATCHES_ROOT))
+        # Marker should be "default" from conftest hard_reset
+        result = FilePatcher.detect_applied_version(str(ue_root), versions)
+        assert result == "default"
+
+    def test_returns_none_when_no_marker(self, tmp_path):
+        from patcher.file_patcher import FilePatcher
+        result = FilePatcher.detect_applied_version(str(tmp_path), [])
+        assert result is None
+
+    def test_matches_case_insensitive(self, tmp_path):
+        from patcher.file_patcher import FilePatcher
+        FilePatcher.write_marker(str(tmp_path), "UE_5.7-Test")
+        from models import EngineInfo
+        result = FilePatcher.detect_applied_version(str(tmp_path), [EngineInfo(engine_version="ue_5.7-test")])
+        assert result == "ue_5.7-test"
+
+    def test_accepts_unknown_marker(self, tmp_path):
+        """An unrecognised marker value should still be returned as-is."""
+        from patcher.file_patcher import FilePatcher
+        FilePatcher.write_marker(str(tmp_path), "manual-edit")
+        result = FilePatcher.detect_applied_version(str(tmp_path), [])
+        assert result == "manual-edit"
