@@ -18,7 +18,7 @@ def _find_project_root() -> Path:
 
 
 PROJECT_ROOT = _find_project_root()
-TEST_ENGINES = PROJECT_ROOT / "Test-Engines"
+TEST_ENGINES = PROJECT_ROOT / "tests" / "test-data"
 
 # Patches are stored under LOCALAPPDATA
 _PATCHES_ROOT = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / "UnrealEngineTool" / "patches"
@@ -140,17 +140,22 @@ def pytest_sessionstart():
     target_rel = "Engine/Source/Editor/MainFrame/Private/HomeScreen/SHomeScreen.cpp"
     ver.files.append(EngineFile(
         path_custom=target_rel,
-        path_default="",
+        path_default=target_rel,
         path_target=target_rel,
         local_name="SHomeScreen.cpp",
     ))
     write_info(ver)
 
-    # Seed the custom file into the version directory so patcher can find it
+    # Seed both custom and original files into the version directory
     custom_src = CUSTOM_DIR / target_rel
     ver_target = ver_dir / target_rel
     ver_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(custom_src), str(ver_target))
+
+    original_src = ORIGINAL_DIR / target_rel
+    original_target = ver_dir / "original" / target_rel
+    original_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(original_src), str(original_target))
 
 
 def _remove_readonly(func, path, exc_info):
