@@ -22,11 +22,28 @@ _FILE_HANDLER: Optional[logging.FileHandler] = None
 _STDOUT_HANDLER: Optional[logging.StreamHandler] = None
 _INITIALISED = False
 
-_FORMAT = "%(asctime)s  %(levelname)-5s  %(name)s  %(message)s"
+_FORMAT = "%(asctime)s  %(levelname)-5s  %(relpath)s  %(message)s"
 _DATE_FMT = "%Y-%m-%d %H:%M:%S"
 
 _LOG_FILENAME = "UnrealEngineTool"
 _LOG_EXT = ".log"
+
+# Resolve the project root once (parent of src/)
+_PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+class _RelPathFormatter(logging.Formatter):
+    """Formatter that replaces %(relpath)s with the file path relative to the project root."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Compute relative path from the caller's source file
+        full = record.pathname
+        try:
+            rel = os.path.relpath(full, _PROJECT_ROOT)
+        except ValueError:
+            rel = full  # fallback: different drive on Windows
+        record.relpath = rel.replace("\\", "/")
+        return super().format(record)
 
 
 def _default_log_dir() -> str:
@@ -104,7 +121,7 @@ def _init():
 
     _FILE_HANDLER = logging.FileHandler(log_path_, encoding="utf-8")
     _FILE_HANDLER.setLevel(logging.DEBUG)
-    _FILE_HANDLER.setFormatter(logging.Formatter(_FORMAT, _DATE_FMT))
+    _FILE_HANDLER.setFormatter(_RelPathFormatter(_FORMAT, _DATE_FMT))
 
     root_logger = logging.getLogger("unrealenginetool")
     root_logger.setLevel(logging.DEBUG)
@@ -129,7 +146,7 @@ def enable_stdout(level: int = logging.INFO):
         return
     _STDOUT_HANDLER = logging.StreamHandler(sys.stdout)
     _STDOUT_HANDLER.setLevel(level)
-    _STDOUT_HANDLER.setFormatter(logging.Formatter(
+    _STDOUT_HANDLER.setFormatter(_RelPathFormatter(
         "%(asctime)s  %(levelname)-5s  %(message)s", _DATE_FMT,
     ))
     root_logger = logging.getLogger("unrealenginetool")
