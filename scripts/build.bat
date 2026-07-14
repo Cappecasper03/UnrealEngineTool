@@ -7,16 +7,11 @@ REM   2. UnrealEngineTool-CLI.exe — Headless-only (no PySide6 bundled)
 REM ================================================================
 setlocal enabledelayedexpansion
 
-set PROJECT_ROOT=%~dp0
+for %%i in ("%~dp0..") do set PROJECT_ROOT=%%~fi
+set PROJECT_ROOT=%PROJECT_ROOT%\
+cd /d "%PROJECT_ROOT%"
 set VENV_DIR=%PROJECT_ROOT%.venv
-set DIST_DIR=%PROJECT_ROOT%dist
-set BUILD_DIR=%PROJECT_ROOT%build
-
-set SPEC_DIR=%PROJECT_ROOT%
-
-REM ---- Clean up stale .spec files from previous builds ----
-if exist "%SPEC_DIR%UnrealEngineTool.spec" del "%SPEC_DIR%UnrealEngineTool.spec"
-if exist "%SPEC_DIR%UnrealEngineTool-CLI.spec" del "%SPEC_DIR%UnrealEngineTool-CLI.spec"
+set OUTPUT_DIR=%PROJECT_ROOT%build-output
 
 REM ---- Activate virtual environment ----
 if exist "%VENV_DIR%\Scripts\activate.bat" (
@@ -46,8 +41,12 @@ echo.
 pyinstaller ^
     --name "UnrealEngineTool" ^
     --onefile ^
+    --noconsole ^
     --noconfirm ^
     --clean ^
+    --distpath "%OUTPUT_DIR%" ^
+    --workpath "%OUTPUT_DIR%\intermediate" ^
+    --specpath "%OUTPUT_DIR%" ^
     --paths "%PROJECT_ROOT%src" ^
     --hidden-import patcher ^
     --hidden-import patcher.file_patcher ^
@@ -67,11 +66,11 @@ if errorlevel 1 (
 
 echo.
 echo [BUILD 1/2] Done!
-for %%f in ("%DIST_DIR%\UnrealEngineTool.exe") do (
+for %%f in ("%OUTPUT_DIR%\UnrealEngineTool.exe") do (
     set FILESIZE=%%~zf
     set /a FILESIZE_MB=!FILESIZE! / 1024 / 1024
     set FILESIZE_KB=!FILESIZE! / 1024
-    echo   dist\UnrealEngineTool.exe  (!FILESIZE_KB! KB = !FILESIZE_MB! MB)
+    echo   build-output\UnrealEngineTool.exe  (!FILESIZE_KB! KB = !FILESIZE_MB! MB)
 )
 
 REM ================================================================
@@ -89,6 +88,9 @@ pyinstaller ^
     --noconfirm ^
     --clean ^
     --console ^
+    --distpath "%OUTPUT_DIR%" ^
+    --workpath "%OUTPUT_DIR%\intermediate" ^
+    --specpath "%OUTPUT_DIR%" ^
     --paths "%PROJECT_ROOT%src" ^
     --hidden-import patcher ^
     --hidden-import patcher.file_patcher ^
@@ -119,20 +121,20 @@ echo ========================================
 echo  BUILD COMPLETE
 echo ========================================
 echo.
-for %%f in ("%DIST_DIR%\UnrealEngineTool.exe") do (
+for %%f in ("%OUTPUT_DIR%\UnrealEngineTool.exe") do (
     set /a FILESIZE=%%~zf / 1024
 )
-for %%f in ("%DIST_DIR%\UnrealEngineTool-CLI.exe") do (
+for %%f in ("%OUTPUT_DIR%\UnrealEngineTool-CLI.exe") do (
     set /a CLI_FILESIZE=%%~zf / 1024
 )
-echo   dist\UnrealEngineTool.exe         (!FILESIZE! KB)
-echo   dist\UnrealEngineTool-CLI.exe     (!CLI_FILESIZE! KB)
+echo   build-output\UnrealEngineTool.exe         (!FILESIZE! KB)
+echo   build-output\UnrealEngineTool-CLI.exe     (!CLI_FILESIZE! KB)
 echo.
 echo Usage:
-echo   dist\UnrealEngineTool.exe               # Launch GUI
-echo   dist\UnrealEngineTool.exe list          # CLI: list patches
-echo   dist\UnrealEngineTool-CLI.exe list      # CLI only (smaller)
-echo   dist\UnrealEngineTool-CLI.exe apply ^<ver^> ^<dir^>
+echo   build-output\UnrealEngineTool.exe               # Launch GUI
+echo   build-output\UnrealEngineTool.exe list          # CLI: list patches
+echo   build-output\UnrealEngineTool-CLI.exe list      # CLI only (smaller)
+echo   build-output\UnrealEngineTool-CLI.exe apply ^<ver^> ^<dir^>
 echo.
 
 endlocal

@@ -1,22 +1,24 @@
+# Build output
+build-output/
+
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 *.egg-info/
 dist/
 build/
+*.spec
+
+# Virtual environment
+.venv/
+venv/
+env/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
-Thumbs.db
+*~
 .DS_Store
-
-# PyInstaller generated specs (regenerated from build.bat flags)
-*.spec
-
-# Project-specific
-.hermes-tmp.*
