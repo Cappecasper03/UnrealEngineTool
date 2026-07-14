@@ -56,7 +56,6 @@ pyinstaller ^
     --hidden-import plugin_manager.backup_manager ^
     --hidden-import plugin_manager.scanner ^
     --hidden-import plugin_manager.patcher ^
-    --collect-all PySide6 ^
     "%PROJECT_ROOT%src\main.py"
 
 if errorlevel 1 (
